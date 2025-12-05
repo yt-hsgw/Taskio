@@ -24,7 +24,7 @@ Thumbs.db
 # Rust env
 /server/.env
 /server/.env.local
-
+/server/.env.example
 # ─────────────────────────────
 # Android / Kotlin
 # ─────────────────────────────
@@ -43,3 +43,4 @@ client/.idea/
 # ─────────────────────────────
 node_modules/
 
+vscode/
