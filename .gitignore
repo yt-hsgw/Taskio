@@ -1,0 +1,45 @@
+# ─────────────────────────────
+# Global
+# ─────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+
+# ─────────────────────────────
+# JetBrains / IntelliJ / Android Studio
+# ─────────────────────────────
+.idea/
+*.iml
+
+# Cursor AI Editor
+.cursor/
+
+# ─────────────────────────────
+# Rust
+# ─────────────────────────────
+/target/
+/server/target/
+**/*.rs.bk
+
+# Rust env
+/server/.env
+/server/.env.local
+
+# ─────────────────────────────
+# Android / Kotlin
+# ─────────────────────────────
+/client/.gradle/
+/client/build/
+/client/app/build/
+/client/local.properties
+client/.idea/
+
+# Android APK / bundle
+*.apk
+*.aab
+
+# ─────────────────────────────
+# Node (Optional future)
+# ─────────────────────────────
+node_modules/
+
