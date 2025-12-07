@@ -4,6 +4,7 @@ use axum::{routing::get, Router, routing::post, routing::put, routing::delete};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tower_http::cors::{Any, CorsLayer};
 
 mod config;
 mod state;
@@ -21,6 +22,11 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let state = Arc::new(AppState::new());
 
     let api = Router::new()
@@ -36,7 +42,10 @@ async fn main() {
         .route("/logs/:log_id", put(routes::task_logs::update_log))
         .route("/logs/:log_id", delete(routes::task_logs::delete_log));
 
-    let app = Router::new().nest("/api/v1", api).with_state(state);
+    let app = Router::new()
+        .nest("/api/v1", api)
+        .with_state(state)
+        .layer(cors);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], config::get_port()));
     tracing::info!(%addr, "Server running");
