@@ -10,7 +10,7 @@ async fn test_create_and_get_task() {
 
     // Create Task
     let payload = json!({
-        "name": "Test Task",
+        "title": "Test Task",
         "description": "This is a test task"
     });
 

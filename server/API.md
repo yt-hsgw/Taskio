@@ -15,7 +15,7 @@
 ### Task
 
 -   id: UUID
--   name: string
+-   title: string
 -   description: string
 -   is_active: bool
 -   created_at: datetime
@@ -26,7 +26,7 @@
 ``` json
 {
   "id": "a3b1eeec-982a-4fd4-93c4-9cdd6c61b8e9",
-  "name": "Gym",
+  "title": "Gym",
   "description": "24h ジムでのトレーニング",
   "is_active": true,
   "created_at": "2025-01-10T12:00:00Z",
