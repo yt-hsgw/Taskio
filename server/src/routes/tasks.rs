@@ -19,12 +19,13 @@ pub async fn create_task(
     let now = Utc::now();
     let task = Task {
         id,
-        name: payload.name,
+        title: payload.title,
         description: payload.description,
         is_active: true,
         created_at: now,
         updated_at: now,
     };
+    println!("Creating task: {:?}", task.title);
 
     state.tasks.lock().await.insert(id, task.clone());
     (StatusCode::CREATED, Json(task))
@@ -72,7 +73,7 @@ pub async fn update_task(
     let mut tasks = state.tasks.lock().await;
     match tasks.get_mut(&id) {
         Some(t) => {
-            t.name = payload.name;
+            t.title = payload.title;
             t.description = payload.description;
             t.updated_at = Utc::now();
             Ok(Json(t.clone()))
