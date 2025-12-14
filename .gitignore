@@ -44,3 +44,4 @@ client/.idea/
 node_modules/
 
 vscode/
+.vscode/
