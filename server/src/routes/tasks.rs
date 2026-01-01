@@ -4,10 +4,16 @@ use chrono::Utc;
 
 use crate::state::AppState;
 use crate::models::task::{Task, CreateTask};
+use crate::errors::ApiError;
+use crate::utils::{parse_uuid, ApiResult};
 
+/// タスク一覧を取得（アクティブなタスクのみ）
 pub async fn list_tasks(State(state): State<std::sync::Arc<AppState>>) -> Json<Vec<Task>> {
     let tasks = state.tasks.lock().await;
-    let vec: Vec<Task> = tasks.values().cloned().collect();
+    let vec: Vec<Task> = tasks.values()
+        .filter(|t| t.is_active)  
+        .cloned()
+        .collect();
     Json(vec)
 }
 
@@ -25,83 +31,68 @@ pub async fn create_task(
         created_at: now,
         updated_at: now,
     };
-    println!("Creating task: {:?}", task.title);
 
+    tracing::info!("Creating task: id={}, title={}", task.id, task.title);
+    
     state.tasks.lock().await.insert(id, task.clone());
     (StatusCode::CREATED, Json(task))
 }
 
+/// タスク詳細を取得
 pub async fn get_task(
     State(state): State<std::sync::Arc<AppState>>,
     Path(task_id): Path<String>,
-) -> Result<Json<Task>, (StatusCode, Json<serde_json::Value>)> {
-    let id = match Uuid::parse_str(&task_id) {
-        Ok(u) => u,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error":"BadRequest","message":"invalid uuid"})),
-            ));
-        }
-    };
+) -> ApiResult<Json<Task>> {
+    let id = parse_uuid(&task_id)?;
 
     let tasks = state.tasks.lock().await;
     match tasks.get(&id) {
-        Some(t) => Ok(Json(t.clone())),
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error":"NotFound","message":"task not found"})),
-        )),
+        Some(t) if t.is_active => Ok(Json(t.clone())),
+        Some(_) => Err(ApiError::not_found("Task")),  // 非アクティブは Not Found
+        None => Err(ApiError::not_found("Task")),
     }
 }
 
+/// タスクを更新
 pub async fn update_task(
     State(state): State<std::sync::Arc<AppState>>,
     Path(task_id): Path<String>,
     Json(payload): Json<CreateTask>,
-) -> Result<Json<Task>, (StatusCode, Json<serde_json::Value>)> {
-    let id = match Uuid::parse_str(&task_id) {
-        Ok(u) => u,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error":"BadRequest","message":"invalid uuid"})),
-            ));
-        }
-    };
+) -> ApiResult<Json<Task>> {
+    let id = parse_uuid(&task_id)?;
 
     let mut tasks = state.tasks.lock().await;
     match tasks.get_mut(&id) {
-        Some(t) => {
+        Some(t) if t.is_active => {
             t.title = payload.title;
             t.description = payload.description;
             t.updated_at = Utc::now();
+            
+            tracing::info!("Updated task: id={}", id);
             Ok(Json(t.clone()))
         }
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error":"NotFound","message":"task not found"})),
-        )),
+        Some(_) => Err(ApiError::not_found("Task")),  // 非アクティブは更新不可
+        None => Err(ApiError::not_found("Task")),
     }
 }
 
+/// タスクを削除（論理削除）
 pub async fn delete_task(
     State(state): State<std::sync::Arc<AppState>>,
     Path(task_id): Path<String>,
-) -> (StatusCode, Json<serde_json::Value>) {
-    let id = match Uuid::parse_str(&task_id) {
-        Ok(u) => u,
-        Err(_) => {
-            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error":"BadRequest","message":"invalid uuid"})));
-        }
-    };
+) -> ApiResult<StatusCode> {
+    let id = parse_uuid(&task_id)?;
 
     let mut tasks = state.tasks.lock().await;
-    if let Some(t) = tasks.get_mut(&id) {
-        t.is_active = false;
-        t.updated_at = Utc::now();
-        (StatusCode::OK, Json(serde_json::json!({"result":"ok"})))
-    } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error":"NotFound","message":"task not found"})))
+    match tasks.get_mut(&id) {
+        Some(t) if t.is_active => {
+            t.is_active = false;
+            t.updated_at = Utc::now();
+            
+            tracing::info!("Deleted task: id={}", id);
+            Ok(StatusCode::NO_CONTENT)  // 204 No Content
+        }
+        Some(_) => Err(ApiError::not_found("Task")),  // 既に削除済み
+        None => Err(ApiError::not_found("Task")),
     }
 }

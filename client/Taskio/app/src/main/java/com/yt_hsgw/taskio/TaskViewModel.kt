@@ -8,6 +8,7 @@ import com.yt_hsgw.taskio.model.TaskRequest
 import com.yt_hsgw.taskio.model.TaskResponse
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class TaskUiState(
@@ -24,46 +25,57 @@ class TaskViewModel(
     private val _uiState = MutableStateFlow(TaskUiState())
     val uiState = _uiState.asStateFlow()
 
+    // 初期化時にタスクを読み込む
+    init {
+        listTasks()
+    }
+
     fun updateTitle(title: String) {
-        _uiState.value = _uiState.value.copy(title = title)
+        _uiState.update { it.copy(title = title) }
     }
 
     fun updateDescription(description: String) {
-        _uiState.value = _uiState.value.copy(description = description)
+        _uiState.update { it.copy(description = description) }
     }
 
     fun createTask() {
+        // 入力チェック
+        if (_uiState.value.title.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "タイトルを入力してください") }
+            return
+        }
+
         viewModelScope.launch {
             try {
-                _uiState.value = _uiState.value.copy(loading = true, errorMessage = null)
+                _uiState.update { it.copy(loading = true, errorMessage = null) }
 
                 val request = TaskRequest(
-                    title = _uiState.value.title,
-                    description = _uiState.value.description
+                    title = _uiState.value.title.trim(),
+                    description = _uiState.value.description.trim().ifBlank { null }
                 )
 
                 val response = api.createTask(request)
 
                 if (response.isSuccessful) {
+                    // 成功後、入力欄をクリアしてリストを再取得
+                    _uiState.update { it.copy(title = "", description = "") }
                     listTasks()
-                    _uiState.value = _uiState.value.copy(
-                        title = "",
-                        description = ""
-                    )
                 } else {
-                    _uiState.value = _uiState.value.copy(
-                        loading = false,
-                        errorMessage = response.message()
-                    )
+                    val errorBody = response.errorBody()?.string()
+                    _uiState.update { 
+                        it.copy(
+                            loading = false,
+                            errorMessage = "タスクの作成に失敗しました: ${response.code()}"
+                        ) 
+                    }
                 }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    loading = false,
-                    errorMessage = e.message
-                )
-            } finally {
-                _uiState.value = _uiState.value.copy(loading = false)
-                println(_uiState.value)
+                _uiState.update { 
+                    it.copy(
+                        loading = false,
+                        errorMessage = "ネットワークエラー: ${e.message}"
+                    ) 
+                }
             }
         }
     }
@@ -71,30 +83,59 @@ class TaskViewModel(
     fun listTasks() {
         viewModelScope.launch {
             try {
-                _uiState.value = _uiState.value.copy(loading = true, errorMessage = null)
+                _uiState.update { it.copy(loading = true, errorMessage = null) }
 
                 val response = api.listTasks()
 
                 if (response.isSuccessful) {
-                    // Corrected line: Map the API response to the model response
-                    val tasksFromApi = response.body() ?: emptyList()
-                    _uiState.value = _uiState.value.copy(
-                        tasks = tasksFromApi.map { apiTask ->
-                            com.yt_hsgw.taskio.model.TaskResponse(
-                                id = apiTask.id,
-                                title = apiTask.title,
-                                description = apiTask.description
-                            )
-                        }
-                    )
+                    val tasks = response.body() ?: emptyList()
+                    _uiState.update { 
+                        it.copy(
+                            tasks = tasks,
+                            loading = false
+                        ) 
+                    }
                 } else {
-                    _uiState.value = _uiState.value.copy(errorMessage = response.message())
+                    _uiState.update { 
+                        it.copy(
+                            loading = false,
+                            errorMessage = "タスクの取得に失敗しました: ${response.code()}"
+                        ) 
+                    }
                 }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(errorMessage = e.message)
-            } finally {
-                _uiState.value = _uiState.value.copy(loading = false)
+                _uiState.update { 
+                    it.copy(
+                        loading = false,
+                        errorMessage = "ネットワークエラー: ${e.message}"
+                    ) 
+                }
             }
         }
+    }
+
+    fun deleteTask(taskId: String) {
+        viewModelScope.launch {
+            try {
+                val response = api.deleteTask(taskId)
+                
+                if (response.isSuccessful) {
+                    // 成功したらリストを更新
+                    listTasks()
+                } else {
+                    _uiState.update {
+                        it.copy(errorMessage = "タスクの削除に失敗しました")
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(errorMessage = "ネットワークエラー")
+                }
+            }
+        }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(errorMessage = null) }
     }
 }

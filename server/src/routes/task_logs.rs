@@ -4,57 +4,57 @@ use chrono::{Utc};
 
 use crate::state::AppState;
 use crate::models::task_log::{TaskLog, CreateTaskLog};
+use crate::errors::ApiError;
+use crate::utils::{parse_uuid, ApiResult};
 
+/// 特定タスクのログ一覧を取得
 pub async fn list_logs_for_task(
     State(state): State<std::sync::Arc<AppState>>,
     Path(task_id): Path<String>,
-) -> Result<Json<Vec<TaskLog>>, (StatusCode, Json<serde_json::Value>)> {
-    let id = match Uuid::parse_str(&task_id) {
-        Ok(u) => u,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error":"BadRequest","message":"invalid uuid"})),
-            ));
-        }
-    };
+) -> ApiResult<Json<Vec<TaskLog>>> {
+    let id = parse_uuid(&task_id)?;
+
+    // タスクの存在確認
+    let tasks = state.tasks.lock().await;
+    if !tasks.contains_key(&id) || !tasks.get(&id).unwrap().is_active {
+        return Err(ApiError::not_found("Task"));
+    }
+    drop(tasks);
 
     let logs = state.task_logs.lock().await;
-    let vec: Vec<TaskLog> = logs.values().cloned().filter(|l| l.task_id == id).collect();
+    let vec: Vec<TaskLog> = logs.values()
+        .filter(|l| l.task_id == id)
+        .cloned()
+        .collect();
+    
     Ok(Json(vec))
 }
 
+/// 新規ログを作成（タスク開始）
 pub async fn create_log_for_task(
     State(state): State<std::sync::Arc<AppState>>,
     Path(task_id): Path<String>,
     Json(payload): Json<CreateTaskLog>,
-) -> Result<(StatusCode, Json<TaskLog>), (StatusCode, Json<serde_json::Value>)> {
-    let id = match Uuid::parse_str(&task_id) {
-        Ok(u) => u,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error":"BadRequest","message":"invalid uuid"})),
-            ));
-        }
-    };
+) -> ApiResult<(StatusCode, Json<TaskLog>)> {
+    let id = parse_uuid(&task_id)?;
 
-    // verify task exists
+    // タスクの存在確認
     let tasks = state.tasks.lock().await;
-    if !tasks.contains_key(&id) {
-        return Err((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error":"NotFound","message":"task not found"})),
-        ));
+    if !tasks.contains_key(&id) || !tasks.get(&id).unwrap().is_active {
+        return Err(ApiError::not_found("Task"));
     }
     drop(tasks);
 
     let now = Utc::now();
     let start = payload.start_at.unwrap_or(now);
-    let end = payload.end_at;
-    let duration = match end {
-        Some(e) => Some((e.signed_duration_since(start)).num_minutes()),
-        None => None,
+    
+    // 継続時間の計算
+    let (end, duration) = match payload.end_at {
+        Some(e) => {
+            let duration = (e.signed_duration_since(start)).num_minutes();
+            (Some(e), Some(duration))
+        }
+        None => (None, None),
     };
 
     let log = TaskLog {
@@ -68,85 +68,74 @@ pub async fn create_log_for_task(
         updated_at: now,
     };
 
+    tracing::info!("Created log: id={}, task_id={}", log.id, log.task_id);
+    
     state.task_logs.lock().await.insert(log.id, log.clone());
     Ok((StatusCode::CREATED, Json(log)))
 }
 
+/// ログ詳細を取得
 pub async fn get_log(
     State(state): State<std::sync::Arc<AppState>>,
     Path(log_id): Path<String>,
-) -> Result<Json<TaskLog>, (StatusCode, Json<serde_json::Value>)> {
-    let id = match Uuid::parse_str(&log_id) {
-        Ok(u) => u,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error":"BadRequest","message":"invalid uuid"})),
-            ));
-        }
-    };
+) -> ApiResult<Json<TaskLog>> {
+    let id = parse_uuid(&log_id)?;
 
     let logs = state.task_logs.lock().await;
     match logs.get(&id) {
         Some(l) => Ok(Json(l.clone())),
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error":"NotFound","message":"log not found"})),
-        )),
+        None => Err(ApiError::not_found("TaskLog")),
     }
 }
 
+/// ログを更新（タスク終了）
 pub async fn update_log(
     State(state): State<std::sync::Arc<AppState>>,
     Path(log_id): Path<String>,
     Json(payload): Json<CreateTaskLog>,
-) -> Result<Json<TaskLog>, (StatusCode, Json<serde_json::Value>)> {
-    let id = match Uuid::parse_str(&log_id) {
-        Ok(u) => u,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error":"BadRequest","message":"invalid uuid"})),
-            ));
-        }
-    };
+) -> ApiResult<Json<TaskLog>> {
+    let id = parse_uuid(&log_id)?;
 
     let mut logs = state.task_logs.lock().await;
     match logs.get_mut(&id) {
         Some(l) => {
+            // 開始時刻の更新
             if let Some(start) = payload.start_at {
                 l.start_at = start;
             }
+            
+            // 終了時刻の更新と継続時間の計算
             if let Some(end) = payload.end_at {
                 l.end_at = Some(end);
                 l.duration_min = Some((end.signed_duration_since(l.start_at)).num_minutes());
             }
-            l.memo = payload.memo.clone();
+            
+            // メモの更新
+            if payload.memo.is_some() {
+                l.memo = payload.memo.clone();
+            }
+            
             l.updated_at = Utc::now();
+            
+            tracing::info!("Updated log: id={}", id);
             Ok(Json(l.clone()))
         }
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error":"NotFound","message":"log not found"})),
-        )),
+        None => Err(ApiError::not_found("TaskLog")),
     }
 }
 
+/// ログを削除
 pub async fn delete_log(
     State(state): State<std::sync::Arc<AppState>>,
     Path(log_id): Path<String>,
-) -> (StatusCode, Json<serde_json::Value>) {
-    let id = match Uuid::parse_str(&log_id) {
-        Ok(u) => u,
-        Err(_) => {
-            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error":"BadRequest","message":"invalid uuid"})));
-        }
-    };
+) -> ApiResult<StatusCode> {
+    let id = parse_uuid(&log_id)?;
 
     let mut logs = state.task_logs.lock().await;
     if logs.remove(&id).is_some() {
-        (StatusCode::OK, Json(serde_json::json!({"result":"ok"})))
+        tracing::info!("Deleted log: id={}", id);
+        Ok(StatusCode::NO_CONTENT)
     } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error":"NotFound","message":"log not found"})))
+        Err(ApiError::not_found("TaskLog"))
     }
 }

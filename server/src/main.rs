@@ -1,5 +1,3 @@
-// server/src/main.rs (修正後)
-
 use axum::{routing::get, Router, routing::post, routing::put, routing::delete};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use std::net::SocketAddr;
@@ -10,6 +8,8 @@ mod config;
 mod state;
 mod routes;
 mod models;
+mod utils;
+mod errors;
 
 use state::AppState;
 
