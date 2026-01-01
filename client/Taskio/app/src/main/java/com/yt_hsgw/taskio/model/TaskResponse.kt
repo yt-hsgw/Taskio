@@ -6,5 +6,8 @@ import com.squareup.moshi.JsonClass
 data class TaskResponse(
     val id: String,
     val title: String,
-    val description: String?
+    val description: String?,
+    val is_active: Boolean,
+    val created_at: String,
+    val updated_at: String
 )
