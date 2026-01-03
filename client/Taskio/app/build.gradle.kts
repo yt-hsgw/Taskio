@@ -52,7 +52,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     // Networking
     implementation(libs.retrofit)
@@ -60,12 +60,19 @@ dependencies {
     implementation(libs.logging.interceptor)
 
     // Moshi
-    implementation("com.squareup.moshi:moshi:1.15.0")
-    implementation("com.squareup.moshi:moshi-kotlin:1.15.0")
-    ksp("com.squareup.moshi:moshi-kotlin-codegen:1.15.0")
+    implementation(libs.moshi)
+    implementation(libs.moshi.kotlin)
+    ksp(libs.moshi.kotlin.codegen)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+
+    // Navigation Compose
+    implementation(libs.androidx.navigation.compose)
+
+    // Icons Extended (Bottom Navigation用)
+    implementation(libs.androidx.compose.material.icons.extended)
+
 
     // Testing
     testImplementation(libs.junit)
