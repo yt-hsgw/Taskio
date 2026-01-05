@@ -1,70 +1,69 @@
 package com.yt_hsgw.taskio.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.yt_hsgw.taskio.TaskViewModel
-import com.yt_hsgw.taskio.model.TaskResponse
-import com.yt_hsgw.taskio.utils.DateTimeUtils
-import java.time.Instant
-import java.time.ZoneId
+import com.yt_hsgw.taskio.model.TaskItem
+import com.yt_hsgw.taskio.viewmodel.TaskViewModel
+import java.time.LocalDate
+import java.time.format.TextStyle
+import java.util.Locale
 
+private val DarkGray = Color(0xFF444444)
+private val MintGreen = Color(0xFFA8E6CF)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
-    viewModel: TaskViewModel = viewModel()
-) {
+fun HomeScreen(viewModel: TaskViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
+    val filteredTasks by viewModel.filteredTasks.collectAsState()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // 今日の日付表示
-        TodayDateHeader()
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Taskio", fontWeight = FontWeight.Bold) },
+                actions = { IconButton(onClick = {}) { Icon(Icons.Default.Add, "Add") } }
+            )
+        }
+    ) { innerPadding ->
+        Column(modifier = Modifier.padding(innerPadding).fillMaxSize().background(Color.White)) {
+            HorizontalCalendar(
+                dates = uiState.calendarDates,
+                selectedDate = uiState.selectedDate,
+                onDateSelected = { viewModel.onDateSelected(it) }
+            )
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Text("Today Tasks", Modifier.padding(16.dp), fontWeight = FontWeight.Bold, fontSize = 20.sp)
 
-        // Today Tasks セクション
-        Text(
-            "Today Tasks",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // タスクリスト
-        if (uiState.loading && uiState.tasks.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        } else if (uiState.tasks.isEmpty()) {
-            EmptyTasksView()
-        } else {
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                items(uiState.tasks, key = { it.id }) { task ->
-                    TodayTaskCard(task = task)
+                items(filteredTasks, key = { it.id }) { task ->
+                    TaskActionCard(
+                        task = task,
+                        onStartClick = { viewModel.toggleStart(task.id) },
+                        onFinishClick = { viewModel.toggleFinish(task.id) }
+                    )
                 }
             }
         }
@@ -72,151 +71,102 @@ fun HomeScreen(
 }
 
 @Composable
-fun TodayDateHeader() {
+fun HorizontalCalendar(dates: List<LocalDate>, selectedDate: LocalDate, onDateSelected: (LocalDate) -> Unit) {
+    val today = LocalDate.now()
     Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceAround
     ) {
-        Column {
-            Text(
-                "Today",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                DateTimeUtils.formatDate(Instant.now()),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        // アイコン（ワイヤフレームのアイコン配置）
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(onClick = { /* 検索機能 */ }) {
-                Icon(Icons.Default.Search, contentDescription = "Search")
-            }
-            IconButton(onClick = { /* 通知機能 */ }) {
-                Icon(Icons.Default.Notifications, contentDescription = "Notifications")
-            }
-        }
-    }
-}
-
-@Composable
-fun TodayTaskCard(task: TaskResponse) {
-    var isChecked by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 左側：時間帯アイコンとタスク情報
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+        dates.forEach { date ->
+            val isToday = date == today
+            val isSelected = date == selectedDate
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .width(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (isSelected) Color.Black else Color.Transparent)
+                    .border(width = if (isToday) 1.dp else 0.dp, color = if (isToday) Color.Black else Color.Transparent, shape = RoundedCornerShape(12.dp))
+                    .clickable { onDateSelected(date) }
+                    .padding(vertical = 8.dp)
             ) {
-                // 時間帯アイコン（ワイヤフレームの円形アイコン）
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = getTimeIcon(task.created_at),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // タスク情報
-                Column {
-                    Text(
-                        task.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    task.description?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                    }
-                }
+                Text(date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.ENGLISH), color = if (isSelected) Color.White else Color.Black, fontSize = 11.sp)
+                Text(date.dayOfMonth.toString(), color = if (isSelected) Color.White else Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
-
-            // 右側：完了トグル（ワイヤフレームのトグルボタン）
-            Switch(
-                checked = isChecked,
-                onCheckedChange = { isChecked = it },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                    checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                )
-            )
         }
     }
 }
 
 @Composable
-fun EmptyTasksView() {
-    Box(
+fun TaskActionCard(task: TaskItem, onStartClick: () -> Unit, onFinishClick: () -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(32.dp),
-        contentAlignment = Alignment.Center
+            .height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(12.dp))
+                .background(DarkGray)
+                .padding(12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = task.title,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+        }
+
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .wrapContentWidth()
+                .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.TaskAlt,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
-            Text(
-                "No tasks for today",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                "Create a new task to get started",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            StatusToggleButton(label = "開始", isDone = task.isStarted, onClick = onStartClick)
+            StatusToggleButton(label = "終了", isDone = task.isFinished, onClick = onFinishClick)
         }
     }
 }
 
-/**
- * 時刻に応じたアイコンを返す（朝/昼/夜）
- */
-fun getTimeIcon(isoDateTime: String): androidx.compose.ui.graphics.vector.ImageVector {
-    val hour = DateTimeUtils.parseIsoDateTime(isoDateTime)
-        ?.atZone(ZoneId.systemDefault())
-        ?.hour ?: 12
-
-    return when (hour) {
-        in 5..11 -> Icons.Default.WbSunny        // 朝
-        in 12..17 -> Icons.Default.LightMode     // 昼
-        else -> Icons.Default.NightsStay         // 夜
+@Composable
+fun StatusToggleButton(label: String, isDone: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .width(100.dp) // ボタンの幅を一定に揃える（"開始"と"終了"で幅がズレないように）
+            .clip(RoundedCornerShape(12.dp))
+            .background(DarkGray)
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(end = 4.dp)
+        )
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(if (isDone) MintGreen else Color.White),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isDone) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = DarkGray
+                )
+            }
+        }
     }
 }

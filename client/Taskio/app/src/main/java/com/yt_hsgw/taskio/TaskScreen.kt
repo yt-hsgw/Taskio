@@ -2,8 +2,6 @@
 package com.yt_hsgw.taskio
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -11,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.yt_hsgw.taskio.model.TaskResponse
 import com.yt_hsgw.taskio.utils.DateTimeUtils
+import com.yt_hsgw.taskio.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
 
 @Composable
@@ -135,14 +134,14 @@ fun TaskScreen(viewModel: TaskViewModel = androidx.lifecycle.viewmodel.compose.v
                 }
             } else {
                 // タスク一覧
-                LazyColumn {
-                    items(uiState.tasks, key = { it.id }) { task ->
-                        TaskCard(
-                            task = task,
-                            onDelete = { viewModel.deleteTask(task.id) }
-                        )
-                    }
-                }
+//                LazyColumn {
+//                    items(uiState.tasks, key = { it.id }) { task ->
+//                        TaskCard(
+//                            task = task,
+//                            onDelete = { viewModel.deleteTask(task.id) }
+//                        )
+//                    }
+//                }
             }
         }
     }
