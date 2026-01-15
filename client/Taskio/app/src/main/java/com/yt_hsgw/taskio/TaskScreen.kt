@@ -13,7 +13,10 @@ import com.yt_hsgw.taskio.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
 
 @Composable
-fun TaskScreen(viewModel: TaskViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
+fun TaskScreen(
+    viewModel: TaskViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    onTaskCreated: () -> Unit = {}
+) {
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -26,6 +29,14 @@ fun TaskScreen(viewModel: TaskViewModel = androidx.lifecycle.viewmodel.compose.v
                 duration = SnackbarDuration.Short
             )
             viewModel.clearError()
+        }
+    }
+
+    // タスクが作成されたらコールバックを呼び出す
+    LaunchedEffect(uiState.taskCreated) {
+        if (uiState.taskCreated) {
+            viewModel.resetTaskCreated()
+            onTaskCreated()
         }
     }
 

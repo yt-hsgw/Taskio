@@ -23,17 +23,25 @@ pub async fn create_task(
 ) -> (StatusCode, Json<Task>) {
     let id = Uuid::new_v4();
     let now = Utc::now();
+
+    let is_recurring = payload.repeat_days.is_some()
+        && !payload.repeat_days.as_ref().unwrap().is_empty();
+
     let task = Task {
         id,
         title: payload.title,
         description: payload.description,
         is_active: true,
+        due_date: payload.due_date,
+        scheduled_date: payload.scheduled_date,
+        repeat_days: payload.repeat_days,
+        is_recurring,
         created_at: now,
         updated_at: now,
     };
 
     tracing::info!("Creating task: id={}, title={}", task.id, task.title);
-    
+
     state.tasks.lock().await.insert(id, task.clone());
     (StatusCode::CREATED, Json(task))
 }
@@ -66,8 +74,13 @@ pub async fn update_task(
         Some(t) if t.is_active => {
             t.title = payload.title;
             t.description = payload.description;
+            t.due_date = payload.due_date;
+            t.scheduled_date = payload.scheduled_date;
+            t.repeat_days = payload.repeat_days.clone();
+            t.is_recurring = payload.repeat_days.is_some()
+                && !payload.repeat_days.as_ref().unwrap().is_empty();
             t.updated_at = Utc::now();
-            
+
             tracing::info!("Updated task: id={}", id);
             Ok(Json(t.clone()))
         }

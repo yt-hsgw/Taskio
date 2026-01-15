@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yt_hsgw.taskio.model.TaskItem
 import com.yt_hsgw.taskio.viewmodel.TaskViewModel
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
@@ -35,12 +36,39 @@ private val MintGreen = Color(0xFFA8E6CF)
 fun HomeScreen(viewModel: TaskViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     val filteredTasks by viewModel.filteredTasks.collectAsState()
+    var showCreateDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // エラーが発生したらSnackbarを表示
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let { error ->
+            snackbarHostState.showSnackbar(
+                message = error,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.clearError()
+        }
+    }
+
+    // タスクが作成されたらダイアログを閉じる
+    LaunchedEffect(uiState.taskCreated) {
+        if (uiState.taskCreated) {
+            showCreateDialog = false
+            viewModel.resetTaskCreated()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Taskio", fontWeight = FontWeight.Bold) },
-                actions = { IconButton(onClick = {}) { Icon(Icons.Default.Add, "Add") } }
+                actions = {
+                    IconButton(onClick = { showCreateDialog = true }) {
+                        Icon(Icons.Default.Add, "Add")
+                    }
+                }
             )
         }
     ) { innerPadding ->
@@ -66,6 +94,27 @@ fun HomeScreen(viewModel: TaskViewModel = viewModel()) {
                     )
                 }
             }
+        }
+
+        // タスク作成ダイアログ
+        if (showCreateDialog) {
+            CreateTaskDialog(
+                title = uiState.title,
+                description = uiState.description,
+                loading = uiState.loading,
+                onTitleChange = { viewModel.updateTitle(it) },
+                onDescriptionChange = { viewModel.updateDescription(it) },
+                onDismiss = {
+                    showCreateDialog = false
+                    viewModel.updateTitle("")
+                    viewModel.updateDescription("")
+                },
+                onCreateTask = {
+                    scope.launch {
+                        viewModel.createTask()
+                    }
+                }
+            )
         }
     }
 }
@@ -169,4 +218,68 @@ fun StatusToggleButton(label: String, isDone: Boolean, onClick: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+fun CreateTaskDialog(
+    title: String,
+    description: String,
+    loading: Boolean,
+    onTitleChange: (String) -> Unit,
+    onDescriptionChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onCreateTask: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        title = { Text("新しいタスクを作成", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = onTitleChange,
+                    label = { Text("タイトル") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    enabled = !loading
+                )
+
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = onDescriptionChange,
+                    label = { Text("説明（任意）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 3,
+                    enabled = !loading
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onCreateTask,
+                enabled = !loading && title.isNotBlank()
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text("作成")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !loading
+            ) {
+                Text("キャンセル")
+            }
+        }
+    )
 }

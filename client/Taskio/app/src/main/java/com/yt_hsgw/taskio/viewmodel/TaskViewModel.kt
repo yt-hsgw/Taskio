@@ -2,7 +2,9 @@ package com.yt_hsgw.taskio.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.yt_hsgw.taskio.api.RetrofitClient
 import com.yt_hsgw.taskio.model.TaskItem
+import com.yt_hsgw.taskio.model.TaskRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -13,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.temporal.TemporalAdjusters
 
 data class TaskUiState(
@@ -21,8 +24,14 @@ data class TaskUiState(
     val calendarDates: List<LocalDate> = emptyList(),
     val title: String = "",
     val description: String = "",
+    val dueDate: LocalDateTime? = null,
+    val scheduledDate: LocalDateTime? = null,
+    val isRecurring: Boolean = false,
+    val selectedDays: Set<Int> = emptySet(),
+    val taskCompletionMap: Map<Pair<String, LocalDate>, Boolean> = emptyMap(),
     val loading: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val taskCreated: Boolean = false
 )
 
 class TaskViewModel : ViewModel() {
@@ -93,8 +102,99 @@ class TaskViewModel : ViewModel() {
         _uiState.update { it.copy(errorMessage = null) }
     }
 
+    fun updateDueDate(date: LocalDateTime?) {
+        _uiState.update { it.copy(dueDate = date) }
+    }
+
+    fun updateScheduledDate(date: LocalDateTime?) {
+        _uiState.update { it.copy(scheduledDate = date) }
+    }
+
+    fun toggleRecurring(isRecurring: Boolean) {
+        _uiState.update {
+            it.copy(
+                isRecurring = isRecurring,
+                selectedDays = if (!isRecurring) emptySet() else it.selectedDays
+            )
+        }
+    }
+
+    fun toggleDay(day: Int) {
+        _uiState.update { state ->
+            val newDays = if (state.selectedDays.contains(day)) {
+                state.selectedDays - day
+            } else {
+                state.selectedDays + day
+            }
+            state.copy(selectedDays = newDays)
+        }
+    }
+
     suspend fun createTask() {
-        // TaskScreen.kt のロジックをここに実装
-        // 作成成功後に fetchTasks() を呼ぶ
+        val currentTitle = _uiState.value.title.trim()
+        val currentDescription = _uiState.value.description.trim().takeIf { it.isNotEmpty() }
+        val currentState = _uiState.value
+
+        if (currentTitle.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "タイトルを入力してください") }
+            return
+        }
+
+        if (currentState.isRecurring && currentState.selectedDays.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "繰り返しタスクは少なくとも1つの曜日を選択してください") }
+            return
+        }
+
+        _uiState.update { it.copy(loading = true, errorMessage = null, taskCreated = false) }
+
+        try {
+            val request = TaskRequest(
+                title = currentTitle,
+                description = currentDescription,
+                due_date = currentState.dueDate?.toString(),
+                scheduled_date = currentState.scheduledDate?.toString(),
+                repeat_days = if (currentState.isRecurring) currentState.selectedDays.toList() else null
+            )
+            val response = RetrofitClient.api.createTask(request)
+
+            if (response.isSuccessful && response.body() != null) {
+                val taskResponse = response.body()!!
+                val newTask = TaskItem(
+                    id = taskResponse.id,
+                    title = taskResponse.title,
+                    description = taskResponse.description,
+                    createdAt = taskResponse.created_at
+                )
+
+                // タスクリストに追加
+                _uiState.update { state ->
+                    state.copy(
+                        tasks = state.tasks + newTask,
+                        loading = false,
+                        title = "",
+                        description = "",
+                        taskCreated = true
+                    )
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        loading = false,
+                        errorMessage = "タスクの作成に失敗しました: ${response.message()}"
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(
+                    loading = false,
+                    errorMessage = "エラーが発生しました: ${e.localizedMessage}"
+                )
+            }
+        }
+    }
+
+    fun resetTaskCreated() {
+        _uiState.update { it.copy(taskCreated = false) }
     }
 }
