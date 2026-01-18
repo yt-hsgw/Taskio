@@ -135,8 +135,8 @@ private fun HomeContent(
     selectedDate: LocalDate,
     filteredTasks: List<TaskWithDayState>,
     onDateSelected: (LocalDate) -> Unit,
-    onStartClick: (Long) -> Unit,
-    onFinishClick: (Long) -> Unit
+    onStartClick: (String) -> Unit,
+    onFinishClick: (String) -> Unit
 ) {
     Column(
         modifier = modifier
@@ -209,8 +209,8 @@ private fun DateHeader(selectedDate: LocalDate) {
 @Composable
 private fun TaskList(
     tasks: List<TaskWithDayState>,
-    onStartClick: (Long) -> Unit,
-    onFinishClick: (Long) -> Unit
+    onStartClick: (String) -> Unit,
+    onFinishClick: (String) -> Unit
 ) {
     if (tasks.isEmpty()) {
         EmptyTasksView()

@@ -385,4 +385,16 @@ class TaskViewModel : ViewModel() {
     fun resetTaskCreated() {
         _uiState.update { it.copy(taskCreated = false) }
     }
+
+    fun clearDialogState() {
+        _uiState.update {
+            it.copy(
+                title = "",
+                description = "",
+                scheduledDate = null,
+                isRecurring = false,
+                selectedDays = emptySet()
+            )
+        }
+    }
 }
