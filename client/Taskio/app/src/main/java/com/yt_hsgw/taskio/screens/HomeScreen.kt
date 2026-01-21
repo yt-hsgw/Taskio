@@ -1,222 +1,255 @@
 package com.yt_hsgw.taskio.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.yt_hsgw.taskio.TaskViewModel
-import com.yt_hsgw.taskio.model.TaskResponse
-import com.yt_hsgw.taskio.utils.DateTimeUtils
-import java.time.Instant
-import java.time.ZoneId
+import com.yt_hsgw.taskio.components.CreateTaskDialog
+import com.yt_hsgw.taskio.components.TaskCard
+import com.yt_hsgw.taskio.components.WeekCalendar
+import com.yt_hsgw.taskio.ui.TaskioStrings
+import com.yt_hsgw.taskio.ui.theme.TaskioColors
+import com.yt_hsgw.taskio.ui.theme.TaskioDimens
+import com.yt_hsgw.taskio.ui.theme.TaskioTypography
+import com.yt_hsgw.taskio.viewmodel.TaskViewModel
+import com.yt_hsgw.taskio.viewmodel.TaskWithDayState
+import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
+/**
+ * ホーム画面
+ *
+ * アプリのメイン画面。週間カレンダー、日付ヘッダー、タスク一覧を表示
+ *
+ * @param viewModel タスク管理用ViewModel
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
-    viewModel: TaskViewModel = viewModel()
-) {
+fun HomeScreen(viewModel: TaskViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
+    val filteredTasks by viewModel.filteredTasks.collectAsState()
+    var showCreateDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // 今日の日付表示
-        TodayDateHeader()
+    // エラーメッセージの表示
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let { error ->
+            snackbarHostState.showSnackbar(
+                message = error,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.clearError()
+        }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
+    // タスク作成完了時の処理
+    LaunchedEffect(uiState.taskCreated) {
+        if (uiState.taskCreated) {
+            showCreateDialog = false
+            viewModel.resetTaskCreated()
+        }
+    }
 
-        // Today Tasks セクション
-        Text(
-            "Today Tasks",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            CreateTaskFab(onClick = { showCreateDialog = true })
+        }
+    ) { innerPadding ->
+        HomeContent(
+            modifier = Modifier.padding(innerPadding),
+            calendarDates = uiState.calendarDates,
+            selectedDate = uiState.selectedDate,
+            filteredTasks = filteredTasks,
+            onDateSelected = viewModel::onDateSelected,
+            onStartClick = viewModel::toggleStart,
+            onFinishClick = viewModel::toggleFinish
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // タスクリスト
-        if (uiState.loading && uiState.tasks.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        } else if (uiState.tasks.isEmpty()) {
-            EmptyTasksView()
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(uiState.tasks, key = { it.id }) { task ->
-                    TodayTaskCard(task = task)
+        // タスク作成ダイアログ
+        if (showCreateDialog) {
+            CreateTaskDialog(
+                title = uiState.title,
+                description = uiState.description,
+                scheduledDate = uiState.scheduledDate?.toLocalDate(),
+                isRecurring = uiState.isRecurring,
+                selectedDays = uiState.selectedDays,
+                loading = uiState.loading,
+                onTitleChange = viewModel::updateTitle,
+                onDescriptionChange = viewModel::updateDescription,
+                onScheduledDateChange = { date ->
+                    viewModel.updateScheduledDate(date?.atStartOfDay())
+                },
+                onRecurringToggle = viewModel::toggleRecurring,
+                onDayToggle = viewModel::toggleDay,
+                onDismiss = {
+                    showCreateDialog = false
+                    viewModel.clearDialogState()
+                },
+                onCreateTask = {
+                    scope.launch { viewModel.createTask() }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun TodayDateHeader() {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column {
-            Text(
-                "Today",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                DateTimeUtils.formatDate(Instant.now()),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        // アイコン（ワイヤフレームのアイコン配置）
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(onClick = { /* 検索機能 */ }) {
-                Icon(Icons.Default.Search, contentDescription = "Search")
-            }
-            IconButton(onClick = { /* 通知機能 */ }) {
-                Icon(Icons.Default.Notifications, contentDescription = "Notifications")
-            }
-        }
-    }
-}
-
-@Composable
-fun TodayTaskCard(task: TaskResponse) {
-    var isChecked by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 左側：時間帯アイコンとタスク情報
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                // 時間帯アイコン（ワイヤフレームの円形アイコン）
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = getTimeIcon(task.created_at),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // タスク情報
-                Column {
-                    Text(
-                        task.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    task.description?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-
-            // 右側：完了トグル（ワイヤフレームのトグルボタン）
-            Switch(
-                checked = isChecked,
-                onCheckedChange = { isChecked = it },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                    checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                )
-            )
-        }
-    }
-}
-
-@Composable
-fun EmptyTasksView() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(32.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.TaskAlt,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
-            Text(
-                "No tasks for today",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                "Create a new task to get started",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 }
 
 /**
- * 時刻に応じたアイコンを返す（朝/昼/夜）
+ * ホーム画面のメインコンテンツ
  */
-fun getTimeIcon(isoDateTime: String): androidx.compose.ui.graphics.vector.ImageVector {
-    val hour = DateTimeUtils.parseIsoDateTime(isoDateTime)
-        ?.atZone(ZoneId.systemDefault())
-        ?.hour ?: 12
+@Composable
+private fun HomeContent(
+    modifier: Modifier = Modifier,
+    calendarDates: List<LocalDate>,
+    selectedDate: LocalDate,
+    filteredTasks: List<TaskWithDayState>,
+    onDateSelected: (LocalDate) -> Unit,
+    onStartClick: (String) -> Unit,
+    onFinishClick: (String) -> Unit
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(TaskioColors.Background)
+    ) {
+        WeekCalendar(
+            dates = calendarDates,
+            selectedDate = selectedDate,
+            onDateSelected = onDateSelected
+        )
 
-    return when (hour) {
-        in 5..11 -> Icons.Default.WbSunny        // 朝
-        in 12..17 -> Icons.Default.LightMode     // 昼
-        else -> Icons.Default.NightsStay         // 夜
+        DateHeader(selectedDate = selectedDate)
+
+        TaskList(
+            tasks = filteredTasks,
+            onStartClick = onStartClick,
+            onFinishClick = onFinishClick
+        )
     }
 }
+
+/**
+ * タスク作成用FAB
+ */
+@Composable
+private fun CreateTaskFab(onClick: () -> Unit) {
+    FloatingActionButton(
+        onClick = onClick,
+        containerColor = TaskioColors.Primary,
+        contentColor = Color.White,
+        shape = CircleShape
+    ) {
+        Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = TaskioStrings.TASK_ADD
+        )
+    }
+}
+
+/**
+ * 日付ヘッダー
+ *
+ * 選択された日付を表示
+ */
+@Composable
+private fun DateHeader(selectedDate: LocalDate) {
+    val today = LocalDate.now()
+    val displayText = if (selectedDate == today) {
+        TaskioStrings.TODAY
+    } else {
+        selectedDate.format(DATE_HEADER_FORMATTER)
+    }
+
+    Text(
+        text = displayText,
+        modifier = Modifier.padding(
+            horizontal = TaskioDimens.PaddingLarge,
+            vertical = TaskioDimens.PaddingSmall
+        ),
+        fontSize = TaskioTypography.FontSizeXLarge,
+        fontWeight = FontWeight.Bold,
+        color = TaskioColors.TextPrimary
+    )
+}
+
+/**
+ * タスク一覧
+ */
+@Composable
+private fun TaskList(
+    tasks: List<TaskWithDayState>,
+    onStartClick: (String) -> Unit,
+    onFinishClick: (String) -> Unit
+) {
+    if (tasks.isEmpty()) {
+        EmptyTasksView()
+    } else {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = TaskioDimens.PaddingLarge),
+            verticalArrangement = Arrangement.spacedBy(TaskioDimens.PaddingMedium),
+            contentPadding = PaddingValues(bottom = FAB_BOTTOM_PADDING)
+        ) {
+            items(tasks, key = { it.id }) { task ->
+                TaskCard(
+                    task = task,
+                    onStartClick = { onStartClick(task.id) },
+                    onFinishClick = { onFinishClick(task.id) }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * タスクが空の時の表示
+ */
+@Composable
+private fun EmptyTasksView() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = TaskioStrings.EMPTY_TASKS_MESSAGE,
+            fontSize = TaskioTypography.FontSizeDefault,
+            color = TaskioColors.TextSecondary
+        )
+    }
+}
+
+// Constants
+private val DATE_HEADER_FORMATTER = DateTimeFormatter.ofPattern(TaskioStrings.DATE_FORMAT_MONTH_DAY)
+private val FAB_BOTTOM_PADDING = TaskioDimens.PaddingLarge * 5 // 80.dp
