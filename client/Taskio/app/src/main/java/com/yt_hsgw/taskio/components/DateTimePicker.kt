@@ -1,9 +1,7 @@
 package com.yt_hsgw.taskio.components
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -20,21 +18,33 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import com.yt_hsgw.taskio.ui.TaskioStrings
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+/**
+ * 日付と時刻を選択するためのコンポーネント
+ *
+ * Material3のDatePickerとTimePickerを組み合わせて使用します。
+ * ユーザーはまず日付を選択し、次に時刻を選択します。
+ *
+ * @param label ボタンに表示するラベル
+ * @param selectedDateTime 現在選択されている日時（nullable）
+ * @param onDateTimeSelected 日時が選択された時のコールバック（nullでクリア）
+ * @param modifier オプションのModifier
+ * @param enabled コンポーネントの有効/無効状態
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DateTimePicker(
     label: String,
     selectedDateTime: LocalDateTime?,
     onDateTimeSelected: (LocalDateTime?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -42,90 +52,174 @@ fun DateTimePicker(
     var tempTime by remember(selectedDateTime) { mutableStateOf(selectedDateTime?.toLocalTime()) }
 
     Column(modifier = modifier) {
-        OutlinedButton(
-            onClick = { showDatePicker = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = selectedDateTime?.let {
-                    "${label}: ${it.format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"))}"
-                } ?: "${label}を設定"
-            )
-        }
+        DateTimeSelectButton(
+            label = label,
+            selectedDateTime = selectedDateTime,
+            enabled = enabled,
+            onClick = { showDatePicker = true }
+        )
 
         if (selectedDateTime != null) {
-            TextButton(
+            ClearButton(
+                enabled = enabled,
                 onClick = {
                     tempDate = null
                     tempTime = null
                     onDateTimeSelected(null)
                 }
-            ) {
-                Text("クリア")
-            }
+            )
         }
     }
 
+    // 日付選択ダイアログ
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = tempDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
-        )
-
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        tempDate = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                        showDatePicker = false
-                        showTimePicker = true
-                    }
-                }) {
-                    Text("OK")
-                }
+        DatePickerDialogContent(
+            initialDate = tempDate,
+            onDateSelected = { date ->
+                tempDate = date
+                showDatePicker = false
+                showTimePicker = true
             },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("キャンセル")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
+            onDismiss = { showDatePicker = false }
+        )
     }
 
+    // 時刻選択ダイアログ
     if (showTimePicker) {
-        val currentTime = tempTime ?: LocalTime.now()
-        val timePickerState = rememberTimePickerState(
-            initialHour = currentTime.hour,
-            initialMinute = currentTime.minute
-        )
-
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showTimePicker = false },
-            title = { Text("時刻を選択") },
-            text = {
-                TimePicker(state = timePickerState)
-            },
-            confirmButton = {
-                Button(onClick = {
-                    tempTime = LocalTime.of(timePickerState.hour, timePickerState.minute)
-                    showTimePicker = false
-
-                    if (tempDate != null && tempTime != null) {
-                        onDateTimeSelected(LocalDateTime.of(tempDate, tempTime))
-                    }
-                }) {
-                    Text("OK")
+        TimePickerDialogContent(
+            initialTime = tempTime,
+            onTimeSelected = { time ->
+                tempTime = time
+                showTimePicker = false
+                if (tempDate != null && tempTime != null) {
+                    onDateTimeSelected(LocalDateTime.of(tempDate, tempTime))
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) {
-                    Text("キャンセル")
-                }
-            }
+            onDismiss = { showTimePicker = false }
         )
     }
 }
+
+/**
+ * 日時選択ボタン
+ */
+@Composable
+private fun DateTimeSelectButton(
+    label: String,
+    selectedDateTime: LocalDateTime?,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        enabled = enabled
+    ) {
+        Text(
+            text = selectedDateTime?.let {
+                "$label: ${it.format(DATE_TIME_FORMATTER)}"
+            } ?: TaskioStrings.formatDateTimeSetLabel(label)
+        )
+    }
+}
+
+/**
+ * クリアボタン
+ */
+@Composable
+private fun ClearButton(
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled
+    ) {
+        Text(TaskioStrings.BUTTON_CLEAR)
+    }
+}
+
+/**
+ * 日付選択ダイアログの内容
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DatePickerDialogContent(
+    initialDate: java.time.LocalDate?,
+    onDateSelected: (java.time.LocalDate) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = initialDate
+            ?.atStartOfDay(ZoneId.systemDefault())
+            ?.toInstant()
+            ?.toEpochMilli()
+    )
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val date = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        onDateSelected(date)
+                    }
+                }
+            ) {
+                Text(TaskioStrings.BUTTON_OK)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(TaskioStrings.BUTTON_CANCEL)
+            }
+        }
+    ) {
+        DatePicker(state = datePickerState)
+    }
+}
+
+/**
+ * 時刻選択ダイアログの内容
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimePickerDialogContent(
+    initialTime: LocalTime?,
+    onTimeSelected: (LocalTime) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val currentTime = initialTime ?: LocalTime.now()
+    val timePickerState = rememberTimePickerState(
+        initialHour = currentTime.hour,
+        initialMinute = currentTime.minute
+    )
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(TaskioStrings.DATETIME_SELECT_TIME) },
+        text = {
+            TimePicker(state = timePickerState)
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onTimeSelected(LocalTime.of(timePickerState.hour, timePickerState.minute))
+                }
+            ) {
+                Text(TaskioStrings.BUTTON_OK)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(TaskioStrings.BUTTON_CANCEL)
+            }
+        }
+    )
+}
+
+// Constants
+private val DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern(TaskioStrings.DATE_FORMAT_WITH_TIME)

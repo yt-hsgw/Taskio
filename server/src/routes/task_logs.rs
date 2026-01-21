@@ -1,96 +1,176 @@
-use axum::{extract::{State, Path}, Json, http::StatusCode};
-use uuid::Uuid;
-use chrono::{Utc};
+//! タスクログ管理エンドポイント
+//!
+//! タスクログのCRUD操作を提供するエンドポイントを定義します。
+//! タスクの開始・終了記録を管理します。
 
-use crate::state::AppState;
-use crate::models::task_log::{TaskLog, CreateTaskLog};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
+use std::sync::Arc;
+
 use crate::errors::ApiError;
+use crate::models::task_log::{CreateTaskLog, TaskLog};
+use crate::state::AppState;
 use crate::utils::{parse_uuid, ApiResult};
 
+// ─────────────────────────────
+// リソース名定数
+// ─────────────────────────────
+
+const RESOURCE_TASK: &str = "Task";
+const RESOURCE_TASK_LOG: &str = "TaskLog";
+
+// ─────────────────────────────
+// タスク関連のログハンドラ
+// ─────────────────────────────
+
 /// 特定タスクのログ一覧を取得
+///
+/// # Endpoint
+///
+/// `GET /api/v1/tasks/{task_id}/logs`
+///
+/// # Path Parameters
+///
+/// * `task_id` - タスクID（UUID形式）
+///
+/// # Returns
+///
+/// * `200 OK` - ログ一覧
+/// * `404 Not Found` - タスクが存在しない
 pub async fn list_logs_for_task(
-    State(state): State<std::sync::Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(task_id): Path<String>,
 ) -> ApiResult<Json<Vec<TaskLog>>> {
     let id = parse_uuid(&task_id)?;
 
     // タスクの存在確認
-    let tasks = state.tasks.lock().await;
-    if !tasks.contains_key(&id) || !tasks.get(&id).unwrap().is_active {
-        return Err(ApiError::not_found("Task"));
+    {
+        let tasks = state.tasks.lock().await;
+        if !is_task_active(&tasks, &id) {
+            return Err(ApiError::not_found(RESOURCE_TASK));
+        }
     }
-    drop(tasks);
 
     let logs = state.task_logs.lock().await;
-    let vec: Vec<TaskLog> = logs.values()
-        .filter(|l| l.task_id == id)
+    let task_logs: Vec<TaskLog> = logs
+        .values()
+        .filter(|log| log.task_id == id)
         .cloned()
         .collect();
-    
-    Ok(Json(vec))
+
+    Ok(Json(task_logs))
 }
 
 /// 新規ログを作成（タスク開始）
+///
+/// # Endpoint
+///
+/// `POST /api/v1/tasks/{task_id}/logs`
+///
+/// # Path Parameters
+///
+/// * `task_id` - タスクID（UUID形式）
+///
+/// # Request Body
+///
+/// ```json
+/// {
+///     "start_at": "2025-01-15T10:00:00Z",
+///     "memo": "Morning session"
+/// }
+/// ```
+///
+/// # Returns
+///
+/// * `201 Created` - 作成されたログ
+/// * `404 Not Found` - タスクが存在しない
 pub async fn create_log_for_task(
-    State(state): State<std::sync::Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(task_id): Path<String>,
     Json(payload): Json<CreateTaskLog>,
 ) -> ApiResult<(StatusCode, Json<TaskLog>)> {
     let id = parse_uuid(&task_id)?;
 
     // タスクの存在確認
-    let tasks = state.tasks.lock().await;
-    if !tasks.contains_key(&id) || !tasks.get(&id).unwrap().is_active {
-        return Err(ApiError::not_found("Task"));
-    }
-    drop(tasks);
-
-    let now = Utc::now();
-    let start = payload.start_at.unwrap_or(now);
-    
-    // 継続時間の計算
-    let (end, duration) = match payload.end_at {
-        Some(e) => {
-            let duration = (e.signed_duration_since(start)).num_minutes();
-            (Some(e), Some(duration))
+    {
+        let tasks = state.tasks.lock().await;
+        if !is_task_active(&tasks, &id) {
+            return Err(ApiError::not_found(RESOURCE_TASK));
         }
-        None => (None, None),
-    };
+    }
 
-    let log = TaskLog {
-        id: Uuid::new_v4(),
-        task_id: id,
-        start_at: start,
-        end_at: end,
-        duration_min: duration,
-        memo: payload.memo,
-        created_at: now,
-        updated_at: now,
-    };
+    let log = payload.into_task_log(id);
 
-    tracing::info!("Created log: id={}, task_id={}", log.id, log.task_id);
-    
+    tracing::info!(
+        log_id = %log.id,
+        task_id = %log.task_id,
+        "Created task log"
+    );
+
     state.task_logs.lock().await.insert(log.id, log.clone());
+
     Ok((StatusCode::CREATED, Json(log)))
 }
 
+// ─────────────────────────────
+// ログ単体のハンドラ
+// ─────────────────────────────
+
 /// ログ詳細を取得
+///
+/// # Endpoint
+///
+/// `GET /api/v1/logs/{log_id}`
+///
+/// # Path Parameters
+///
+/// * `log_id` - ログID（UUID形式）
+///
+/// # Returns
+///
+/// * `200 OK` - ログ詳細
+/// * `404 Not Found` - ログが存在しない
 pub async fn get_log(
-    State(state): State<std::sync::Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(log_id): Path<String>,
 ) -> ApiResult<Json<TaskLog>> {
     let id = parse_uuid(&log_id)?;
 
     let logs = state.task_logs.lock().await;
     match logs.get(&id) {
-        Some(l) => Ok(Json(l.clone())),
-        None => Err(ApiError::not_found("TaskLog")),
+        Some(log) => Ok(Json(log.clone())),
+        None => Err(ApiError::not_found(RESOURCE_TASK_LOG)),
     }
 }
 
 /// ログを更新（タスク終了）
+///
+/// # Endpoint
+///
+/// `PUT /api/v1/logs/{log_id}`
+///
+/// # Path Parameters
+///
+/// * `log_id` - ログID（UUID形式）
+///
+/// # Request Body
+///
+/// ```json
+/// {
+///     "end_at": "2025-01-15T11:00:00Z",
+///     "memo": "Good session"
+/// }
+/// ```
+///
+/// # Returns
+///
+/// * `200 OK` - 更新されたログ
+/// * `404 Not Found` - ログが存在しない
 pub async fn update_log(
-    State(state): State<std::sync::Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(log_id): Path<String>,
     Json(payload): Json<CreateTaskLog>,
 ) -> ApiResult<Json<TaskLog>> {
@@ -98,44 +178,60 @@ pub async fn update_log(
 
     let mut logs = state.task_logs.lock().await;
     match logs.get_mut(&id) {
-        Some(l) => {
-            // 開始時刻の更新
-            if let Some(start) = payload.start_at {
-                l.start_at = start;
-            }
-            
-            // 終了時刻の更新と継続時間の計算
-            if let Some(end) = payload.end_at {
-                l.end_at = Some(end);
-                l.duration_min = Some((end.signed_duration_since(l.start_at)).num_minutes());
-            }
-            
-            // メモの更新
-            if payload.memo.is_some() {
-                l.memo = payload.memo.clone();
-            }
-            
-            l.updated_at = Utc::now();
-            
-            tracing::info!("Updated log: id={}", id);
-            Ok(Json(l.clone()))
+        Some(log) => {
+            log.update(
+                payload.start_at,
+                payload.end_at,
+                payload.memo,
+                payload.is_completed,
+            );
+
+            tracing::info!(log_id = %id, "Updated task log");
+            Ok(Json(log.clone()))
         }
-        None => Err(ApiError::not_found("TaskLog")),
+        None => Err(ApiError::not_found(RESOURCE_TASK_LOG)),
     }
 }
 
 /// ログを削除
+///
+/// # Endpoint
+///
+/// `DELETE /api/v1/logs/{log_id}`
+///
+/// # Path Parameters
+///
+/// * `log_id` - ログID（UUID形式）
+///
+/// # Returns
+///
+/// * `204 No Content` - 削除成功
+/// * `404 Not Found` - ログが存在しない
 pub async fn delete_log(
-    State(state): State<std::sync::Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(log_id): Path<String>,
 ) -> ApiResult<StatusCode> {
     let id = parse_uuid(&log_id)?;
 
     let mut logs = state.task_logs.lock().await;
     if logs.remove(&id).is_some() {
-        tracing::info!("Deleted log: id={}", id);
+        tracing::info!(log_id = %id, "Deleted task log");
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(ApiError::not_found("TaskLog"))
+        Err(ApiError::not_found(RESOURCE_TASK_LOG))
     }
+}
+
+// ─────────────────────────────
+// ヘルパー関数
+// ─────────────────────────────
+
+/// タスクがアクティブかどうかを確認
+fn is_task_active(
+    tasks: &std::collections::HashMap<uuid::Uuid, crate::models::task::Task>,
+    task_id: &uuid::Uuid,
+) -> bool {
+    tasks
+        .get(task_id)
+        .map_or(false, |task| task.is_active)
 }
