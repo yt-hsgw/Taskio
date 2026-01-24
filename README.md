@@ -1,86 +1,59 @@
-# TaskLog App (Android + Rust)
+# Log Screen 実装ファイル
 
-個人のトレーニング・生活習慣・日常タスクを  
-**「いつ」「どれくらい」「結果（グラフ）」** で可視化するための  
-ログ記録アプリです。
+## ファイル配置先
 
----
+各ファイルを以下のパスに配置してください。
 
-## 📌 技術スタック
+### Client (Android)
 
-### **Client (Android)**
-- Kotlin
-- Android Jetpack (ViewModel / LiveData / Compose or XML)
-- Retrofit（Rust API と通信）
-- Coroutines
-- Jetpack Navigation（予定）
+| ファイル名 | 配置先 |
+|-----------|--------|
+| `LogScreen.kt` | `client/Taskio/app/src/main/java/com/yt_hsgw/taskio/ui/screens/` |
+| `LogTaskCard.kt` | `client/Taskio/app/src/main/java/com/yt_hsgw/taskio/ui/components/` |
+| `WeeklyProgressIndicator.kt` | `client/Taskio/app/src/main/java/com/yt_hsgw/taskio/ui/components/` |
+| `TaskEditDialog.kt` | `client/Taskio/app/src/main/java/com/yt_hsgw/taskio/ui/components/` |
+| `LogViewModel.kt` | `client/Taskio/app/src/main/java/com/yt_hsgw/taskio/viewmodel/` |
+| `TaskLogResponse.kt` | `client/Taskio/app/src/main/java/com/yt_hsgw/taskio/model/` |
 
-### **Server (Backend)**
-- Rust
-- Axum（Webフレームワーク）
-- Tokio（Async Runtime）
-- Serde（JSON）
-- SQLx（将来的に導入予定）
-- SQLite or PostgreSQL（後で決定）
+### 既に更新済み（Filesystem経由）
 
----
+以下のファイルは直接プロジェクトに書き込み済みです：
 
-## 📂 プロジェクト構成
+| ファイル名 | パス |
+|-----------|------|
+| `mock_data.rs` | `server/src/mock_data.rs` |
+| `main.rs` | `server/src/main.rs` （更新） |
+| `TaskApi.kt` | `client/.../api/TaskApi.kt` （更新） |
+| `TaskioStrings.kt` | `client/.../ui/TaskioStrings.kt` （更新） |
+
+## 依存関係
+
+`LogViewModel.kt` は `RetrofitClient.api` を使用しています。
+既存の `RetrofitClient` が正しく設定されていることを確認してください。
+
+## コンポーネント構成
+
 ```
-Taskio/
-├── README.md
-├── .gitignore
-├── client/
-│ ├── app/
-│ ├── build.gradle.kts
-│ ├── settings.gradle.kts
-│ └── README.md
-└── server/
-├── Cargo.toml
-├── src/
-│ ├── main.rs
-│ └── routes/
-├── README.md
-└── .env.example
+LogScreen
+├── TopAppBar（タイトル: "Log"）
+├── LazyColumn
+│   └── LogTaskCard（各タスク）
+│       ├── タイトル + 編集ボタン
+│       ├── WeeklyProgressIndicator（7つの円形インジケーター）
+│       └── 詳細セクション（展開可能）
+└── TaskEditDialog（編集時のみ表示）
 ```
 
----
+## 週間進捗の表示ロジック
 
-## 🎯 プロジェクトの目的
+- 日曜日(0)から土曜日(6)までの7日間を表示
+- 繰り返し曜日に含まれる日: 灰色の円（予定あり）
+- 実行済みの日: 塗りつぶされた円（primary color）
+- それ以外: 薄い枠線のみ
 
-このプロジェクトでは、以下の2つの言語・技術を体系的に習得することを目的とします。
+## 動作確認
 
-### **Objectives**
-1. **Kotlin（Android開発）をモダン構成で学ぶ**
-2. **Rust（Axum）でモダンなAPIサーバーを学ぶ**
-3. Android ↔ Rust で実際に連携しながら、Web API の本質を理解する
-4. 将来の拡張（認証・統計・グラフ・通知）に耐えられる形で構築する
-
----
-
-## 🚦 現在の進行状況（2025）
-- [x] アプリ方針策定
-- [x] リポジトリ構成
-- [ ] Rust(Axum) 初期構築
-- [ ] Android（Kotlin）初期構築
-- [ ] API 仕様書（draft）
-- [ ] DB 設計
-- [ ] クライアント – サーバー接続
-- [ ] グラフ画面実装
-
----
-
-## 📌 今後の開発フロー
-
-1. **Rust（Axum）で API の skeleton を作成**
-2. **Android側で Retrofit 通信層を用意**
-3. Rust API と接続 → ジム・タスクログを登録/取得
-4. グラフ画面・カレンダー画面を追加
-5. 認証（Token）を追加
-6. スケジュール通知・分析機能を追加
-
----
-
-## 📄 ライセンス
-MIT（変更可能）
-
+1. サーバーを起動: `cd server && cargo run`
+2. アプリをビルド・実行
+3. ボトムナビゲーションの「Log」タブをタップ
+4. モックデータのタスクが表示されることを確認

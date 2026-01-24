@@ -38,6 +38,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
 mod errors;
+mod mock_data;
 mod models;
 mod routes;
 mod state;
@@ -69,6 +70,9 @@ async fn main() {
 
     // アプリケーション状態の初期化
     let state = Arc::new(AppState::new());
+
+    // モックデータの初期化（開発用）
+    mock_data::initialize_mock_data(&state).await;
 
     // ルーターの構築
     let app = build_router(state);
