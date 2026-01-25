@@ -19,6 +19,8 @@ object TaskioStrings {
     const val BUTTON_RETRY = "再試行"
     const val BUTTON_DELETE = "削除"
     const val BUTTON_CLEAR = "クリア"
+    const val BUTTON_SAVE = "保存"
+    const val BUTTON_EDIT = "編集"
 
     // ─────────────────────────────
     // Task / タスク
@@ -37,6 +39,9 @@ object TaskioStrings {
     const val TASK_CREATOR = "タスク作成"
     const val TASK_COUNT_FORMAT = "%d tasks"
     const val TASK_CREATED_AT_PREFIX = "作成: "
+    const val TASK_EDIT = "タスクを編集"
+    const val TASK_DETAIL = "詳細"
+    const val TASK_NOT_RECURRING = "単発タスク"
 
     // ─────────────────────────────
     // Task Actions / タスクアクション
@@ -49,6 +54,7 @@ object TaskioStrings {
     // ─────────────────────────────
     const val EMPTY_TASKS_MESSAGE = "この日のタスクはありません"
     const val EMPTY_TASKS_HINT = "タスクがありません\n上の入力欄から作成できます"
+    const val EMPTY_LOG_MESSAGE = "登録されているタスクがありません"
 
     // ─────────────────────────────
     // Date / 日付
@@ -89,6 +95,8 @@ object TaskioStrings {
     const val CD_CLEAR_DATE = "日付をクリア"
     const val CD_SELECT_DATE = "日付を選択"
     const val CD_DELETE_TASK = "タスクを削除"
+    const val CD_EDIT_TASK = "タスクを編集"
+    const val CD_WEEKLY_PROGRESS = "週間進捗"
 
     // ─────────────────────────────
     // Validation / バリデーション
@@ -103,12 +111,14 @@ object TaskioStrings {
     const val ERROR_NETWORK = "ネットワークエラーが発生しました"
     const val ERROR_SERVER = "サーバーエラーが発生しました"
     const val ERROR_TASK_CREATE_FAILED = "タスクの作成に失敗しました"
+    const val ERROR_TASK_UPDATE_FAILED = "タスクの更新に失敗しました"
     const val ERROR_UNKNOWN = "不明なエラーが発生しました"
 
     // ─────────────────────────────
     // Success Messages / 成功メッセージ
     // ─────────────────────────────
     const val SUCCESS_TASK_CREATED = "タスクを作成しました"
+    const val SUCCESS_TASK_UPDATED = "タスクを更新しました"
 
     // ─────────────────────────────
     // Screen Titles / 画面タイトル
@@ -130,6 +140,18 @@ object TaskioStrings {
     // ─────────────────────────────
     const val SPLASH_TAGLINE = "Your personal task manager"
 
+    // ─────────────────────────────
+    // Log Screen / ログ画面
+    // ─────────────────────────────
+    const val LOG_WEEKLY_SCHEDULE = "週間スケジュール"
+    const val LOG_COMPLETION_RATE = "達成率"
+
+    // ─────────────────────────────
+    // 展開/折りたたみ (追加)
+    // ─────────────────────────────
+    const val EXPAND = "もっと見る"
+    const val COLLAPSE = "閉じる"
+
     /**
      * 曜日の短縮名を取得
      *
@@ -145,6 +167,37 @@ object TaskioStrings {
         6 -> SATURDAY_SHORT
         7 -> SUNDAY_SHORT
         else -> ""
+    }
+
+    /**
+     * 曜日インデックスから曜日名を取得（0=日曜日）
+     *
+     * @param dayIndex 曜日インデックス（0=日曜日, 6=土曜日）
+     * @return 曜日の短縮名
+     */
+    fun getDayOfWeekByIndex(dayIndex: Int): String = when (dayIndex) {
+        0 -> SUNDAY_SHORT
+        1 -> MONDAY_SHORT
+        2 -> TUESDAY_SHORT
+        3 -> WEDNESDAY_SHORT
+        4 -> THURSDAY_SHORT
+        5 -> FRIDAY_SHORT
+        6 -> SATURDAY_SHORT
+        else -> ""
+    }
+
+    /**
+     * 繰り返し曜日リストを文字列に変換
+     *
+     * @param repeatDays 繰り返し曜日のリスト（0=日曜日, 6=土曜日）
+     * @return フォーマット済み文字列（例: "月・水・金"）
+     */
+    fun formatRepeatDays(repeatDays: List<Int>?): String {
+        if (repeatDays.isNullOrEmpty()) return TASK_NOT_RECURRING
+        
+        // 日〜土の順序でソート
+        val sorted = repeatDays.sorted()
+        return sorted.joinToString("・") { getDayOfWeekByIndex(it) }
     }
 
     /**

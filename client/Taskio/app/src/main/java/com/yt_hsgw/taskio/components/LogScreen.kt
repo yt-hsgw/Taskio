@@ -1,4 +1,4 @@
-package com.yt_hsgw.taskio.screens
+package com.yt_hsgw.taskio.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,13 +34,11 @@ import com.yt_hsgw.taskio.ui.TaskioStrings
 import com.yt_hsgw.taskio.ui.theme.TaskioTheme
 import com.yt_hsgw.taskio.viewmodel.LogUiState
 import com.yt_hsgw.taskio.viewmodel.LogViewModel
-import java.time.LocalDate
 
 /**
  * ログ画面
  *
  * 登録されているタスクの一覧と週間進捗を表示します。
- * タスクの編集も可能です。
  *
  * @param viewModel LogViewModel
  * @param modifier Modifier
@@ -72,7 +73,6 @@ fun LogScreen(
         onEditClick = { task -> viewModel.openEditDialog(task) },
         onEditTitleChange = { viewModel.updateEditTitle(it) },
         onEditDescriptionChange = { viewModel.updateEditDescription(it) },
-        onEditScheduledDateChange = { viewModel.updateEditScheduledDate(it) },
         onEditRecurringChange = { viewModel.toggleEditRecurring(it) },
         onEditDayToggle = { viewModel.toggleEditDay(it) },
         onEditSave = { viewModel.updateTask() },
@@ -84,6 +84,7 @@ fun LogScreen(
 /**
  * ログ画面のコンテンツ（Stateless）
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogScreenContent(
     uiState: LogUiState,
@@ -91,7 +92,6 @@ private fun LogScreenContent(
     onEditClick: (TaskItem) -> Unit,
     onEditTitleChange: (String) -> Unit,
     onEditDescriptionChange: (String) -> Unit,
-    onEditScheduledDateChange: (LocalDate?) -> Unit,
     onEditRecurringChange: (Boolean) -> Unit,
     onEditDayToggle: (Int) -> Unit,
     onEditSave: () -> Unit,
@@ -100,6 +100,19 @@ private fun LogScreenContent(
 ) {
     Scaffold(
         modifier = modifier,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = TaskioStrings.SCREEN_LOG,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+        },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         Box(
@@ -138,13 +151,10 @@ private fun LogScreenContent(
             TaskEditDialog(
                 title = uiState.editTitle,
                 description = uiState.editDescription,
-                scheduledDate = uiState.editScheduledDate,
                 isRecurring = uiState.editIsRecurring,
                 selectedDays = uiState.editSelectedDays,
-                loading = uiState.updating,
                 onTitleChange = onEditTitleChange,
                 onDescriptionChange = onEditDescriptionChange,
-                onScheduledDateChange = onEditScheduledDateChange,
                 onRecurringChange = onEditRecurringChange,
                 onDayToggle = onEditDayToggle,
                 onSave = onEditSave,
@@ -241,9 +251,7 @@ private fun LogScreenContentPreview() {
         TaskItem(
             id = "4",
             title = "資格勉強",
-            description = "AWS認定資格の勉強。毎日1時間は確保する。\n" +
-                "ソリューションアーキテクトアソシエイトを目標に。\n" +
-                "公式ドキュメントとUdemyの講座を活用。",
+            description = "AWS認定資格の勉強",
             createdAt = "2025-01-24",
             repeatDays = listOf(0, 1, 2, 3, 4, 5, 6),
             isRecurring = true
@@ -268,7 +276,6 @@ private fun LogScreenContentPreview() {
             onEditClick = {},
             onEditTitleChange = {},
             onEditDescriptionChange = {},
-            onEditScheduledDateChange = {},
             onEditRecurringChange = {},
             onEditDayToggle = {},
             onEditSave = {},
@@ -290,7 +297,6 @@ private fun LogScreenEmptyPreview() {
             onEditClick = {},
             onEditTitleChange = {},
             onEditDescriptionChange = {},
-            onEditScheduledDateChange = {},
             onEditRecurringChange = {},
             onEditDayToggle = {},
             onEditSave = {},
@@ -309,7 +315,6 @@ private fun LogScreenLoadingPreview() {
             onEditClick = {},
             onEditTitleChange = {},
             onEditDescriptionChange = {},
-            onEditScheduledDateChange = {},
             onEditRecurringChange = {},
             onEditDayToggle = {},
             onEditSave = {},
