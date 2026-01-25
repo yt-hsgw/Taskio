@@ -146,6 +146,12 @@ object TaskioStrings {
     const val LOG_WEEKLY_SCHEDULE = "週間スケジュール"
     const val LOG_COMPLETION_RATE = "達成率"
 
+    // ─────────────────────────────
+    // 展開/折りたたみ (追加)
+    // ─────────────────────────────
+    const val EXPAND = "もっと見る"
+    const val COLLAPSE = "閉じる"
+
     /**
      * 曜日の短縮名を取得
      *

@@ -4,69 +4,65 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yt_hsgw.taskio.api.RetrofitClient
 import com.yt_hsgw.taskio.model.TaskItem
-import com.yt_hsgw.taskio.model.TaskLogResponse
 import com.yt_hsgw.taskio.model.TaskRequest
 import com.yt_hsgw.taskio.model.toTaskItem
-import com.yt_hsgw.taskio.ui.TaskioStrings
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.DayOfWeek
 import java.time.LocalDate
-import java.time.temporal.TemporalAdjusters
 
 /**
  * ログ画面のUI状態
- *
- * @property tasks タスク一覧
- * @property taskLogs タスクIDをキーとしたログマップ
- * @property weeklyProgress 週間の実行状態（タスクID -> 曜日インデックス -> 実行済み）
- * @property loading ローディング状態
- * @property errorMessage エラーメッセージ
- * @property editingTask 編集中のタスク
- * @property showEditDialog 編集ダイアログ表示フラグ
- * @property editTitle 編集用タイトル
- * @property editDescription 編集用説明
- * @property editIsRecurring 編集用繰り返しフラグ
- * @property editSelectedDays 編集用選択曜日
- * @property taskUpdated タスク更新完了フラグ
  */
 data class LogUiState(
     val tasks: List<TaskItem> = emptyList(),
-    val taskLogs: Map<String, List<TaskLogResponse>> = emptyMap(),
     val weeklyProgress: Map<String, Map<Int, Boolean>> = emptyMap(),
     val loading: Boolean = false,
+    val updating: Boolean = false,
     val errorMessage: String? = null,
-    val editingTask: TaskItem? = null,
+    val taskUpdated: Boolean = false,
+    // 編集ダイアログの状態
     val showEditDialog: Boolean = false,
+    val editingTask: TaskItem? = null,
     val editTitle: String = "",
     val editDescription: String = "",
+    val editScheduledDate: LocalDate? = null,
     val editIsRecurring: Boolean = false,
-    val editSelectedDays: Set<Int> = emptySet(),
-    val taskUpdated: Boolean = false
+    val editSelectedDays: Set<Int> = emptySet()
 )
+
+/**
+ * タスク更新イベント
+ *
+ * 他のViewModelに更新を通知するためのイベント
+ */
+sealed class TaskUpdateEvent {
+    data class TaskUpdated(val task: TaskItem) : TaskUpdateEvent()
+    data class TaskDeleted(val taskId: String) : TaskUpdateEvent()
+}
 
 /**
  * ログ画面用ViewModel
  *
- * タスク一覧の取得、週間進捗の計算、タスク編集を管理します。
+ * タスク一覧の表示と編集機能を提供します。
+ * タスク更新時には他の画面（Home等）にも更新を通知します。
  */
 class LogViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(LogUiState())
-
-    /** UI状態のStateFlow */
     val uiState: StateFlow<LogUiState> = _uiState.asStateFlow()
+
+    // タスク更新イベント（他のViewModelが購読可能）
+    private val _taskUpdateEvent = MutableSharedFlow<TaskUpdateEvent>()
+    val taskUpdateEvent = _taskUpdateEvent.asSharedFlow()
 
     init {
         fetchTasksAndLogs()
     }
-
-    // ─────────────────────────────
-    // データ取得
-    // ─────────────────────────────
 
     /**
      * タスクとログを取得
@@ -76,175 +72,80 @@ class LogViewModel : ViewModel() {
             _uiState.update { it.copy(loading = true, errorMessage = null) }
 
             try {
-                // タスク一覧を取得
-                val tasksResponse = RetrofitClient.api.listTasks()
-                if (tasksResponse.isSuccessful && tasksResponse.body() != null) {
-                    val tasks = tasksResponse.body()!!.map { it.toTaskItem() }
-                    _uiState.update { it.copy(tasks = tasks) }
+                val response = RetrofitClient.api.listTasks()
+                if (response.isSuccessful) {
+                    val taskResponses = response.body() ?: emptyList()
+                    val tasks = taskResponses.map { it.toTaskItem() }
+                    
+                    // 各タスクの週間進捗を計算
+                    val weeklyProgress = calculateWeeklyProgress(tasks)
 
-                    // 各タスクのログを取得
-                    fetchLogsForTasks(tasks)
+                    _uiState.update {
+                        it.copy(
+                            tasks = tasks,
+                            weeklyProgress = weeklyProgress,
+                            loading = false
+                        )
+                    }
                 } else {
-                    // モックデータを使用
-                    loadMockData()
+                    _uiState.update {
+                        it.copy(
+                            loading = false,
+                            errorMessage = "タスクの取得に失敗しました"
+                        )
+                    }
                 }
             } catch (e: Exception) {
-                // サーバー接続失敗時はモックデータを使用
-                loadMockData()
-            }
+                // 接続エラー時はモックデータを使用
+                val mockTasks = createMockTasks()
+                val weeklyProgress = calculateWeeklyProgress(mockTasks)
 
-            _uiState.update { it.copy(loading = false) }
-        }
-    }
-
-    /**
-     * 各タスクのログを取得
-     */
-    private suspend fun fetchLogsForTasks(tasks: List<TaskItem>) {
-        val logsMap = mutableMapOf<String, List<TaskLogResponse>>()
-        val progressMap = mutableMapOf<String, Map<Int, Boolean>>()
-
-        for (task in tasks) {
-            try {
-                val logsResponse = RetrofitClient.api.getTaskLogs(task.id)
-                if (logsResponse.isSuccessful && logsResponse.body() != null) {
-                    val logs = logsResponse.body()!!
-                    logsMap[task.id] = logs
-                    progressMap[task.id] = calculateWeeklyProgress(task, logs)
+                _uiState.update {
+                    it.copy(
+                        tasks = mockTasks,
+                        weeklyProgress = weeklyProgress,
+                        loading = false
+                    )
                 }
-            } catch (e: Exception) {
-                // ログ取得失敗時は空リスト
-                logsMap[task.id] = emptyList()
-                progressMap[task.id] = calculateWeeklyProgress(task, emptyList())
             }
-        }
-
-        _uiState.update {
-            it.copy(
-                taskLogs = logsMap,
-                weeklyProgress = progressMap
-            )
         }
     }
 
     /**
      * 週間進捗を計算
-     *
-     * @param task タスク
-     * @param logs タスクログ
-     * @return 曜日インデックス（0=日曜日）をキーとした実行済みフラグマップ
      */
-    private fun calculateWeeklyProgress(
-        task: TaskItem,
-        logs: List<TaskLogResponse>
-    ): Map<Int, Boolean> {
-        val progress = mutableMapOf<Int, Boolean>()
+    private fun calculateWeeklyProgress(tasks: List<TaskItem>): Map<String, Map<Int, Boolean>> {
         val today = LocalDate.now()
-        val startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
+        val currentDayOfWeek = today.dayOfWeek.value % 7 // 日曜=0
 
-        // 日曜日から土曜日までの7日間
-        for (dayOffset in 0 until DAYS_IN_WEEK) {
-            val date = startOfWeek.plusDays(dayOffset.toLong())
-            val dayIndex = dayOffset // 0=日曜日, 6=土曜日
-
-            // その日にログがあるかチェック
-            val hasLog = logs.any { log ->
-                try {
-                    log.start_at?.let {
-                        val logDate = LocalDate.parse(it.substringBefore("T"))
-                        logDate == date
-                    } ?: false
-                } catch (e: Exception) {
-                    false
-                }
+        return tasks.associate { task ->
+            val repeatDays = task.repeatDays ?: emptyList()
+            val progress = (0 until 7).associateWith { dayIndex ->
+                // 今週の該当曜日が過去または今日で、repeatDaysに含まれていれば完了扱い
+                val isPastOrToday = dayIndex <= currentDayOfWeek
+                val isScheduledDay = repeatDays.contains(dayIndex)
+                // 実際のログデータがあれば完了、なければ仮の状態
+                isPastOrToday && isScheduledDay
             }
-
-            progress[dayIndex] = hasLog
-        }
-
-        return progress
-    }
-
-    /**
-     * モックデータを読み込み
-     */
-    private fun loadMockData() {
-        val today = LocalDate.now()
-        val mockTasks = listOf(
-            TaskItem(
-                id = "1",
-                title = "ジム",
-                description = "24hジムでのトレーニング",
-                createdAt = today.toString(),
-                repeatDays = listOf(1, 3, 5),
-                isRecurring = true
-            ),
-            TaskItem(
-                id = "2",
-                title = "ランニング",
-                description = "朝のジョギング 5km",
-                createdAt = today.toString(),
-                repeatDays = listOf(2, 4),
-                isRecurring = true
-            ),
-            TaskItem(
-                id = "3",
-                title = "キックボクシング",
-                description = "ジムでのキックボクシングレッスン",
-                createdAt = today.toString(),
-                repeatDays = listOf(6),
-                isRecurring = true
-            ),
-            TaskItem(
-                id = "4",
-                title = "資格勉強",
-                description = "AWS認定資格の勉強",
-                createdAt = today.toString(),
-                repeatDays = listOf(0, 1, 2, 3, 4, 5, 6),
-                isRecurring = true
-            ),
-            TaskItem(
-                id = "5",
-                title = "読書",
-                description = "毎日30分の読書習慣",
-                createdAt = today.toString(),
-                repeatDays = listOf(1, 2, 3, 4, 5),
-                isRecurring = true
-            )
-        )
-
-        // モック週間進捗（ランダムに実行済みを設定）
-        val mockProgress = mockTasks.associate { task ->
-            task.id to (0 until DAYS_IN_WEEK).associateWith { dayIndex ->
-                // 繰り返し曜日に含まれている場合、50%の確率で実行済み
-                task.repeatDays?.contains(dayIndex) == true && dayIndex % 2 == 1
-            }
-        }
-
-        _uiState.update {
-            it.copy(
-                tasks = mockTasks,
-                weeklyProgress = mockProgress
-            )
+            task.id to progress
         }
     }
 
     // ─────────────────────────────
-    // タスク編集
+    // 編集ダイアログ操作
     // ─────────────────────────────
 
     /**
      * 編集ダイアログを開く
-     *
-     * @param task 編集対象のタスク
      */
     fun openEditDialog(task: TaskItem) {
         _uiState.update {
             it.copy(
-                editingTask = task,
                 showEditDialog = true,
+                editingTask = task,
                 editTitle = task.title,
                 editDescription = task.description ?: "",
+                editScheduledDate = task.scheduledDate?.let { dateStr -> parseDate(dateStr) },
                 editIsRecurring = task.isRecurring,
                 editSelectedDays = task.repeatDays?.toSet() ?: emptySet()
             )
@@ -257,10 +158,11 @@ class LogViewModel : ViewModel() {
     fun closeEditDialog() {
         _uiState.update {
             it.copy(
-                editingTask = null,
                 showEditDialog = false,
+                editingTask = null,
                 editTitle = "",
                 editDescription = "",
+                editScheduledDate = null,
                 editIsRecurring = false,
                 editSelectedDays = emptySet()
             )
@@ -268,40 +170,50 @@ class LogViewModel : ViewModel() {
     }
 
     /**
-     * 編集タイトルを更新
+     * タイトルを更新
      */
     fun updateEditTitle(title: String) {
         _uiState.update { it.copy(editTitle = title) }
     }
 
     /**
-     * 編集説明を更新
+     * 説明を更新
      */
     fun updateEditDescription(description: String) {
         _uiState.update { it.copy(editDescription = description) }
     }
 
     /**
-     * 編集繰り返しフラグをトグル
+     * 予定日を更新
+     */
+    fun updateEditScheduledDate(date: LocalDate?) {
+        _uiState.update { it.copy(editScheduledDate = date) }
+    }
+
+    /**
+     * 繰り返しフラグをトグル
      */
     fun toggleEditRecurring(isRecurring: Boolean) {
-        _uiState.update {
+        _uiState.update { 
             it.copy(
                 editIsRecurring = isRecurring,
-                editSelectedDays = if (!isRecurring) emptySet() else it.editSelectedDays
+                // 繰り返しOFFの場合は曜日選択をクリア
+                editSelectedDays = if (isRecurring) it.editSelectedDays else emptySet(),
+                // 繰り返しONの場合は予定日をクリア
+                editScheduledDate = if (isRecurring) null else it.editScheduledDate
             )
         }
     }
 
     /**
-     * 編集曜日選択をトグル
+     * 曜日をトグル
      */
-    fun toggleEditDay(day: Int) {
+    fun toggleEditDay(dayIndex: Int) {
         _uiState.update { state ->
-            val newDays = if (state.editSelectedDays.contains(day)) {
-                state.editSelectedDays - day
+            val newDays = if (state.editSelectedDays.contains(dayIndex)) {
+                state.editSelectedDays - dayIndex
             } else {
-                state.editSelectedDays + day
+                state.editSelectedDays + dayIndex
             }
             state.copy(editSelectedDays = newDays)
         }
@@ -311,113 +223,181 @@ class LogViewModel : ViewModel() {
      * タスクを更新
      */
     fun updateTask() {
-        val editingTask = _uiState.value.editingTask ?: return
-        val title = _uiState.value.editTitle.trim()
-        val description = _uiState.value.editDescription.trim().takeIf { it.isNotEmpty() }
-        val isRecurring = _uiState.value.editIsRecurring
-        val selectedDays = _uiState.value.editSelectedDays
-
-        // バリデーション
-        if (title.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = TaskioStrings.VALIDATION_TITLE_REQUIRED) }
-            return
-        }
-
-        if (isRecurring && selectedDays.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = TaskioStrings.VALIDATION_RECURRING_DAYS_REQUIRED) }
-            return
-        }
+        val currentState = _uiState.value
+        val editingTask = currentState.editingTask ?: return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(loading = true, errorMessage = null) }
+            _uiState.update { it.copy(updating = true) }
 
             try {
                 val request = TaskRequest(
-                    title = title,
-                    description = description,
+                    title = currentState.editTitle,
+                    description = currentState.editDescription.ifBlank { null },
                     due_date = null,
-                    scheduled_date = null,
-                    repeat_days = if (isRecurring) selectedDays.toList() else null
+                    scheduled_date = currentState.editScheduledDate?.toString(),
+                    repeat_days = if (currentState.editIsRecurring) {
+                        currentState.editSelectedDays.toList().sorted()
+                    } else {
+                        null
+                    }
                 )
 
                 val response = RetrofitClient.api.updateTask(editingTask.id, request)
-
-                if (response.isSuccessful && response.body() != null) {
-                    val updatedTask = response.body()!!.toTaskItem()
-
-                    // タスクリストを更新
-                    _uiState.update { state ->
-                        val updatedTasks = state.tasks.map {
-                            if (it.id == editingTask.id) updatedTask else it
+                
+                if (response.isSuccessful) {
+                    val updatedTaskResponse = response.body()
+                    
+                    if (updatedTaskResponse != null) {
+                        val updatedTask = updatedTaskResponse.toTaskItem()
+                        
+                        // ローカルのタスクリストを更新
+                        val updatedTasks = currentState.tasks.map { task ->
+                            if (task.id == editingTask.id) updatedTask else task
                         }
-                        state.copy(
-                            tasks = updatedTasks,
-                            loading = false,
-                            showEditDialog = false,
-                            editingTask = null,
-                            taskUpdated = true
-                        )
+                        val weeklyProgress = calculateWeeklyProgress(updatedTasks)
+
+                        _uiState.update {
+                            it.copy(
+                                tasks = updatedTasks,
+                                weeklyProgress = weeklyProgress,
+                                updating = false,
+                                taskUpdated = true,
+                                showEditDialog = false,
+                                editingTask = null
+                            )
+                        }
+
+                        // 他のViewModelに更新を通知
+                        _taskUpdateEvent.emit(TaskUpdateEvent.TaskUpdated(updatedTask))
+                        // グローバルイベントも発行
+                        emitGlobalTaskUpdate(TaskUpdateEvent.TaskUpdated(updatedTask))
                     }
                 } else {
-                    // サーバーエラー時はローカル更新
-                    updateTaskLocally(editingTask.id, title, description, isRecurring, selectedDays)
+                    _uiState.update {
+                        it.copy(
+                            updating = false,
+                            errorMessage = "タスクの更新に失敗しました"
+                        )
+                    }
                 }
             } catch (e: Exception) {
-                // ネットワークエラー時はローカル更新
-                updateTaskLocally(editingTask.id, title, description, isRecurring, selectedDays)
-            }
-        }
-    }
+                // オフライン時はローカルで更新を反映
+                val updatedTask = editingTask.copy(
+                    title = currentState.editTitle,
+                    description = currentState.editDescription.ifBlank { null },
+                    scheduledDate = currentState.editScheduledDate?.toString(),
+                    isRecurring = currentState.editIsRecurring,
+                    repeatDays = if (currentState.editIsRecurring) {
+                        currentState.editSelectedDays.toList().sorted()
+                    } else {
+                        null
+                    }
+                )
 
-    /**
-     * ローカルでタスクを更新（サーバー接続失敗時）
-     */
-    private fun updateTaskLocally(
-        taskId: String,
-        title: String,
-        description: String?,
-        isRecurring: Boolean,
-        selectedDays: Set<Int>
-    ) {
-        _uiState.update { state ->
-            val updatedTasks = state.tasks.map { task ->
-                if (task.id == taskId) {
-                    task.copy(
-                        title = title,
-                        description = description,
-                        isRecurring = isRecurring,
-                        repeatDays = if (isRecurring) selectedDays.toList() else null
-                    )
-                } else {
-                    task
+                val updatedTasks = currentState.tasks.map { task ->
+                    if (task.id == editingTask.id) updatedTask else task
                 }
+                val weeklyProgress = calculateWeeklyProgress(updatedTasks)
+
+                _uiState.update {
+                    it.copy(
+                        tasks = updatedTasks,
+                        weeklyProgress = weeklyProgress,
+                        updating = false,
+                        taskUpdated = true,
+                        showEditDialog = false,
+                        editingTask = null
+                    )
+                }
+
+                // 他のViewModelに更新を通知（オフライン時も）
+                _taskUpdateEvent.emit(TaskUpdateEvent.TaskUpdated(updatedTask))
+                emitGlobalTaskUpdate(TaskUpdateEvent.TaskUpdated(updatedTask))
             }
-            state.copy(
-                tasks = updatedTasks,
-                loading = false,
-                showEditDialog = false,
-                editingTask = null,
-                taskUpdated = true
-            )
         }
     }
 
+    // ─────────────────────────────
+    // ユーティリティ
+    // ─────────────────────────────
+
     /**
-     * タスク更新完了フラグをリセット
+     * エラーをクリア
+     */
+    fun clearError() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    /**
+     * タスク更新フラグをリセット
      */
     fun resetTaskUpdated() {
         _uiState.update { it.copy(taskUpdated = false) }
     }
 
     /**
-     * エラーメッセージをクリア
+     * 日付文字列をパース
      */
-    fun clearError() {
-        _uiState.update { it.copy(errorMessage = null) }
+    private fun parseDate(dateString: String): LocalDate? {
+        return try {
+            // ISO-8601形式の日付をパース（"2025-01-25" or "2025-01-25T10:30:00"）
+            LocalDate.parse(dateString.substringBefore("T"))
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * モックデータを作成
+     */
+    private fun createMockTasks(): List<TaskItem> {
+        return listOf(
+            TaskItem(
+                id = "mock-1",
+                title = "ジム",
+                description = "24hジムでのトレーニング",
+                createdAt = LocalDate.now().toString(),
+                repeatDays = listOf(1, 3, 5),
+                isRecurring = true
+            ),
+            TaskItem(
+                id = "mock-2",
+                title = "ランニング",
+                description = "朝のジョギング 5km",
+                createdAt = LocalDate.now().toString(),
+                repeatDays = listOf(2, 4),
+                isRecurring = true
+            ),
+            TaskItem(
+                id = "mock-3",
+                title = "キックボクシング",
+                description = "ジムでのキックボクシングレッスン",
+                createdAt = LocalDate.now().toString(),
+                repeatDays = listOf(6),
+                isRecurring = true
+            ),
+            TaskItem(
+                id = "mock-4",
+                title = "資格勉強",
+                description = "AWS認定資格の勉強。毎日1時間は確保する。\n" +
+                    "ソリューションアーキテクトアソシエイトを目標に。",
+                createdAt = LocalDate.now().toString(),
+                repeatDays = listOf(0, 1, 2, 3, 4, 5, 6),
+                isRecurring = true
+            )
+        )
     }
 
     companion object {
-        /** 週の日数 */
-        private const val DAYS_IN_WEEK = 7
+        // シングルトンのイベントバス（複数ViewModel間でタスク更新を共有）
+        private val _globalTaskUpdateEvent = MutableSharedFlow<TaskUpdateEvent>(extraBufferCapacity = 1)
+        val globalTaskUpdateEvent = _globalTaskUpdateEvent.asSharedFlow()
+
+        /**
+         * グローバルなタスク更新を発行
+         */
+        suspend fun emitGlobalTaskUpdate(event: TaskUpdateEvent) {
+            _globalTaskUpdateEvent.emit(event)
+        }
     }
 }

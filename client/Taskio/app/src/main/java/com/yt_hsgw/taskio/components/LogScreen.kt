@@ -27,10 +27,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.yt_hsgw.taskio.components.LogTaskCard
+import com.yt_hsgw.taskio.components.TaskEditDialog
 import com.yt_hsgw.taskio.model.TaskItem
 import com.yt_hsgw.taskio.ui.TaskioStrings
-import com.yt_hsgw.taskio.ui.components.LogTaskCard
-import com.yt_hsgw.taskio.ui.components.TaskEditDialog
 import com.yt_hsgw.taskio.ui.theme.TaskioTheme
 import com.yt_hsgw.taskio.viewmodel.LogUiState
 import com.yt_hsgw.taskio.viewmodel.LogViewModel

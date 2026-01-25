@@ -6,6 +6,8 @@ import com.yt_hsgw.taskio.api.RetrofitClient
 import com.yt_hsgw.taskio.model.TaskItem
 import com.yt_hsgw.taskio.model.TaskRequest
 import com.yt_hsgw.taskio.ui.TaskioStrings
+import com.yt_hsgw.taskio.viewmodel.LogViewModel
+import com.yt_hsgw.taskio.viewmodel.TaskUpdateEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -144,6 +146,11 @@ class TaskViewModel : ViewModel() {
     init {
         setupCalendar()
         fetchTasks()
+        viewModelScope.launch {
+            LogViewModel.globalTaskUpdateEvent.collect { event ->
+                handleTaskUpdateEvent(event)
+            }
+        }
     }
 
     // ─────────────────────────────
@@ -517,6 +524,32 @@ class TaskViewModel : ViewModel() {
                 selectedDays = emptySet(),
                 taskCreated = true
             )
+        }
+    }
+
+    /**
+     * タスク更新イベントを処理
+     *
+     * LogViewModelからのタスク更新を受けてローカル状態を更新します。
+     */
+    private fun handleTaskUpdateEvent(event: TaskUpdateEvent) {
+        when (event) {
+            is TaskUpdateEvent.TaskUpdated -> {
+                // ローカルのタスクリストを更新
+                _uiState.update { state ->
+                    val updatedTasks = state.tasks.map { task ->
+                        if (task.id == event.task.id) event.task else task
+                    }
+                    state.copy(tasks = updatedTasks)
+                }
+            }
+            is TaskUpdateEvent.TaskDeleted -> {
+                // タスクをリストから削除
+                _uiState.update { state ->
+                    val updatedTasks = state.tasks.filter { it.id != event.taskId }
+                    state.copy(tasks = updatedTasks)
+                }
+            }
         }
     }
 

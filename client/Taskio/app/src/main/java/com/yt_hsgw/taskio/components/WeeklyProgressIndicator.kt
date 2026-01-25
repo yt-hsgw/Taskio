@@ -1,10 +1,11 @@
-package com.yt_hsgw.taskio.ui.components
+package com.yt_hsgw.taskio.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
@@ -39,10 +40,12 @@ fun WeeklyProgressIndicator(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier.semantics {
-            contentDescription = TaskioStrings.CD_WEEKLY_PROGRESS
-        },
-        horizontalArrangement = Arrangement.spacedBy(DayIndicatorSpacing),
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics {
+                contentDescription = TaskioStrings.CD_WEEKLY_PROGRESS
+            },
+        horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 日曜日(0)から土曜日(6)まで
@@ -118,7 +121,6 @@ private fun DayIndicator(
 
 private const val DAYS_IN_WEEK = 7
 private val DayIndicatorSize = 32.dp
-private val DayIndicatorSpacing = 4.dp
 private val DayIndicatorBorderWidth = 1.dp
 private val DayIndicatorFontSize = 10.sp
 
