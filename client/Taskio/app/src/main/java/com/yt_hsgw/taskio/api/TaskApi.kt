@@ -1,5 +1,6 @@
 package com.yt_hsgw.taskio.api
 
+import com.yt_hsgw.taskio.model.CalendarLogsResponse
 import com.yt_hsgw.taskio.model.TaskLogResponse
 import com.yt_hsgw.taskio.model.TaskRequest
 import com.yt_hsgw.taskio.model.TaskResponse
@@ -10,6 +11,7 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 /**
  * Taskio REST API インターフェース
@@ -92,9 +94,23 @@ interface TaskApi {
     @GET("tasks/{task_id}/logs")
     suspend fun getTaskLogs(@Path("task_id") taskId: String): Response<List<TaskLogResponse>>
 
+    // ─────────────────────────────
+    // Calendar Logs
+    // ─────────────────────────────
+
     /**
-     * 全タスクのログを取得（簡易版：各タスクのログを取得）
-     * 注意: この実装はクライアント側で各タスクのログを個別に取得します
+     * 期間指定でログを一括取得
+     *
+     * カレンダー画面で使用します。
+     * 指定した期間内のすべてのログをタスク情報付きで取得します。
+     *
+     * @param from 開始日（YYYY-MM-DD形式）
+     * @param to 終了日（YYYY-MM-DD形式）
+     * @return 期間内のログ一覧
      */
-    // 注: サーバー側に全ログ取得APIが必要な場合は別途追加
+    @GET("logs")
+    suspend fun getLogsByDateRange(
+        @Query("from") from: String,
+        @Query("to") to: String
+    ): Response<CalendarLogsResponse>
 }

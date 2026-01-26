@@ -152,6 +152,17 @@ object TaskioStrings {
     const val EXPAND = "もっと見る"
     const val COLLAPSE = "閉じる"
 
+    // ─────────────────────────────
+    // Calendar Screen / カレンダー画面
+    // ─────────────────────────────
+    const val CALENDAR_NO_LOGS = "この日のログはありません"
+    const val CALENDAR_LEGEND_HAS_LOG = "ログあり"
+    const val CALENDAR_LEGEND_TODAY = "今日"
+    const val CALENDAR_LEGEND_SELECTED = "選択中"
+    const val CALENDAR_PREVIOUS_MONTH = "前月"
+    const val CALENDAR_NEXT_MONTH = "次月"
+    const val CALENDAR_TODAY = "今日"
+
     /**
      * 曜日の短縮名を取得
      *

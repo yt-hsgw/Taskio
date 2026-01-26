@@ -96,16 +96,6 @@ class LogViewModel : ViewModel() {
                     }
                 }
             } catch (e: Exception) {
-                // TODO: モックをコメントアウト（サーバー通信確認用）
-                // val mockTasks = createMockTasks()
-                // val weeklyProgress = calculateWeeklyProgress(mockTasks)
-                // _uiState.update {
-                //     it.copy(
-                //         tasks = mockTasks,
-                //         weeklyProgress = weeklyProgress,
-                //         loading = false
-                //     )
-                // }
                 _uiState.update {
                     it.copy(
                         loading = false,
@@ -290,39 +280,6 @@ class LogViewModel : ViewModel() {
                     }
                 }
             } catch (e: Exception) {
-                // TODO: モックをコメントアウト（サーバー通信確認用）
-                // // オフライン時はローカルで更新を反映
-                // val updatedTask = editingTask.copy(
-                //     title = currentState.editTitle,
-                //     description = currentState.editDescription.ifBlank { null },
-                //     scheduledDate = currentState.editScheduledDate?.toString(),
-                //     isRecurring = currentState.editIsRecurring,
-                //     repeatDays = if (currentState.editIsRecurring) {
-                //         currentState.editSelectedDays.toList().sorted()
-                //     } else {
-                //         null
-                //     }
-                // )
-                //
-                // val updatedTasks = currentState.tasks.map { task ->
-                //     if (task.id == editingTask.id) updatedTask else task
-                // }
-                // val weeklyProgress = calculateWeeklyProgress(updatedTasks)
-                //
-                // _uiState.update {
-                //     it.copy(
-                //         tasks = updatedTasks,
-                //         weeklyProgress = weeklyProgress,
-                //         updating = false,
-                //         taskUpdated = true,
-                //         showEditDialog = false,
-                //         editingTask = null
-                //     )
-                // }
-                //
-                // // 他のViewModelに更新を通知（オフライン時も）
-                // _taskUpdateEvent.emit(TaskUpdateEvent.TaskUpdated(updatedTask))
-                // emitGlobalTaskUpdate(TaskUpdateEvent.TaskUpdated(updatedTask))
                 _uiState.update {
                     it.copy(
                         updating = false,
@@ -362,48 +319,6 @@ class LogViewModel : ViewModel() {
             null
         }
     }
-
-    // TODO: モックをコメントアウト（サーバー通信確認用）
-    // /**
-    //  * モックデータを作成
-    //  */
-    // private fun createMockTasks(): List<TaskItem> {
-    //     return listOf(
-    //         TaskItem(
-    //             id = "mock-1",
-    //             title = "ジム",
-    //             description = "24hジムでのトレーニング",
-    //             createdAt = LocalDate.now().toString(),
-    //             repeatDays = listOf(1, 3, 5),
-    //             isRecurring = true
-    //         ),
-    //         TaskItem(
-    //             id = "mock-2",
-    //             title = "ランニング",
-    //             description = "朝のジョギング 5km",
-    //             createdAt = LocalDate.now().toString(),
-    //             repeatDays = listOf(2, 4),
-    //             isRecurring = true
-    //         ),
-    //         TaskItem(
-    //             id = "mock-3",
-    //             title = "キックボクシング",
-    //             description = "ジムでのキックボクシングレッスン",
-    //             createdAt = LocalDate.now().toString(),
-    //             repeatDays = listOf(6),
-    //             isRecurring = true
-    //         ),
-    //         TaskItem(
-    //             id = "mock-4",
-    //             title = "資格勉強",
-    //             description = "AWS認定資格の勉強。毎日1時間は確保する。\n" +
-    //                 "ソリューションアーキテクトアソシエイトを目標に。",
-    //             createdAt = LocalDate.now().toString(),
-    //             repeatDays = listOf(0, 1, 2, 3, 4, 5, 6),
-    //             isRecurring = true
-    //         )
-    //     )
-    // }
 
     companion object {
         // シングルトンのイベントバス（複数ViewModel間でタスク更新を共有）

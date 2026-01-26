@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -14,6 +15,7 @@ import androidx.navigation.compose.rememberNavController
 import com.yt_hsgw.taskio.navigation.Screen
 import com.yt_hsgw.taskio.navigation.bottomNavItems
 import com.yt_hsgw.taskio.screens.*
+import com.yt_hsgw.taskio.viewmodel.TaskViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -21,6 +23,9 @@ fun MainApp() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+
+    // アプリ全体で共有するViewModel（画面切り替えしても状態を保持）
+    val taskViewModel: TaskViewModel = viewModel()
 
     // スプラッシュ画面の表示判定
     val isSplashScreen = currentDestination?.route == Screen.Splash.route
@@ -39,7 +44,9 @@ fun MainApp() {
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         titleContentColor = MaterialTheme.colorScheme.onSurface
-                    )
+                    ),
+                    // 上部の余白を削除してコンパクトに
+                    windowInsets = WindowInsets(top = 0.dp)
                 )
             }
         },
@@ -94,7 +101,7 @@ fun MainApp() {
                 )
             }
             composable(Screen.Home.route) {
-                HomeScreen()
+                HomeScreen(viewModel = taskViewModel)
             }
             composable(Screen.Log.route) {
                 LogScreen()
