@@ -152,32 +152,46 @@ pub async fn get_logs_by_date_range(
             continue;
         }
 
-        // 1. 予定日（scheduled_date）が設定されたタスク
-        if let Some(scheduled_date) = task.scheduled_date {
-            let task_date = scheduled_date.date_naive();
+        // 1. 予定日（scheduled_date）が設定された単発タスク
+        // 繰り返しタスクはrepeat_daysセクションで処理するためスキップ
+        if !task.is_recurring {
+            if let Some(scheduled_date) = task.scheduled_date {
+                let task_date = scheduled_date.date_naive();
 
-            if task_date >= from_date && task_date <= to_date {
-                let status = get_status_for_date(&task.id, task_date);
-                tracing::debug!("Adding scheduled task '{}' to calendar with status {:?}", task.title, status);
-                calendar_logs.push(CalendarLogResponse {
-                    id: task.id.to_string(),
-                    task_id: task.id.to_string(),
-                    task_title: task.title.clone(),
-                    task_description: task.description.clone(),
-                    memo: None,
-                    created_at: task.created_at,
-                    scheduled_date: Some(scheduled_date),
-                    status,
-                });
+                if task_date >= from_date && task_date <= to_date {
+                    let status = get_status_for_date(&task.id, task_date);
+                    tracing::debug!("Adding scheduled task '{}' to calendar with status {:?}", task.title, status);
+                    calendar_logs.push(CalendarLogResponse {
+                        id: task.id.to_string(),
+                        task_id: task.id.to_string(),
+                        task_title: task.title.clone(),
+                        task_description: task.description.clone(),
+                        memo: None,
+                        created_at: task.created_at,
+                        scheduled_date: Some(scheduled_date),
+                        status,
+                    });
+                }
             }
         }
 
         // 2. 繰り返しタスク（repeat_daysが設定されている）
         if let Some(ref repeat_days) = task.repeat_days {
             if !repeat_days.is_empty() {
+                // タスクの開始日（scheduled_date）を取得
+                let task_start_date = task.scheduled_date.map(|d| d.date_naive());
+
                 // 期間内の各日をチェック
                 let mut current_date = from_date;
                 while current_date <= to_date {
+                    // タスクの開始日より前の日付はスキップ
+                    if let Some(start_date) = task_start_date {
+                        if current_date < start_date {
+                            current_date = current_date.succ_opt().unwrap_or(current_date);
+                            continue;
+                        }
+                    }
+
                     // 曜日を取得（0=日曜, 1=月曜, ..., 6=土曜）
                     let weekday = current_date.weekday().num_days_from_sunday() as u8;
 
