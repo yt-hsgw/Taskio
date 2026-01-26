@@ -108,6 +108,7 @@ impl TaskLog {
     /// # Arguments
     ///
     /// * `end` - 終了時刻
+    #[allow(dead_code)]
     pub fn set_end_time(&mut self, end: DateTime<Utc>) {
         self.end_at = Some(end);
         self.duration_min = Some(Self::calculate_duration(self.start_at, end));

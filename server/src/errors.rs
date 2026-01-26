@@ -58,6 +58,7 @@ pub enum ApiError {
 
     /// リクエストが不正
     #[error("Bad request: {0}")]
+    #[allow(dead_code)]
     BadRequest(String),
 
     /// UUID形式が不正
@@ -88,6 +89,7 @@ impl ApiError {
     /// # Arguments
     ///
     /// * `msg` - エラーメッセージ
+    #[allow(dead_code)]
     pub fn bad_request(msg: &str) -> Self {
         ApiError::BadRequest(msg.to_string())
     }

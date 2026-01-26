@@ -21,8 +21,9 @@
 //! - `DELETE /api/v1/tasks/{task_id}` - タスク削除
 //!
 //! ## Task Logs
-//! - `GET /api/v1/tasks/{task_id}/logs` - ログ一覧
+//! - `GET /api/v1/tasks/{task_id}/logs` - 特定タスクのログ一覧
 //! - `POST /api/v1/tasks/{task_id}/logs` - ログ作成
+//! - `GET /api/v1/logs?from=YYYY-MM-DD&to=YYYY-MM-DD` - 期間指定ログ取得（カレンダー用）
 //! - `GET /api/v1/logs/{log_id}` - ログ詳細
 //! - `PUT /api/v1/logs/{log_id}` - ログ更新
 //! - `DELETE /api/v1/logs/{log_id}` - ログ削除
@@ -134,15 +135,13 @@ fn build_api_routes() -> Router<Arc<AppState>> {
         .route("/tasks/:task_id", get(routes::tasks::get_task))
         .route("/tasks/:task_id", put(routes::tasks::update_task))
         .route("/tasks/:task_id", delete(routes::tasks::delete_task))
-        // Task Logs (nested under tasks)
+        // Task Logs (per task)
         .route(
             "/tasks/:task_id/logs",
-            get(routes::task_logs::list_logs_for_task),
+            get(routes::task_logs::list_logs_for_task).post(routes::task_logs::create_log_for_task),
         )
-        .route(
-            "/tasks/:task_id/logs",
-            post(routes::task_logs::create_log_for_task),
-        )
+        // Calendar Logs (date range query) - 新規追加
+        .route("/logs", get(routes::calendar::get_logs_by_date_range))
         // Task Logs (direct)
         .route("/logs/:log_id", get(routes::task_logs::get_log))
         .route("/logs/:log_id", put(routes::task_logs::update_log))

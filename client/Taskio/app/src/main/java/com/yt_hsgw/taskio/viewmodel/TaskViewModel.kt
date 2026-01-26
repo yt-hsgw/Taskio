@@ -248,59 +248,13 @@ class TaskViewModel : ViewModel() {
                     }
                     _uiState.update { it.copy(tasks = tasks, loading = false) }
                 } else {
-                    // TODO: モックをコメントアウト（サーバー通信確認用）
-                    // loadMockTasks()
                     _uiState.update { it.copy(loading = false, errorMessage = "タスクの取得に失敗しました: ${response.code()}") }
                 }
             } catch (e: Exception) {
-                // TODO: モックをコメントアウト（サーバー通信確認用）
-                // loadMockTasks()
                 _uiState.update { it.copy(loading = false, errorMessage = "サーバー接続エラー: ${e.message}") }
             }
         }
     }
-
-    // TODO: モックをコメントアウト（サーバー通信確認用）
-    // /**
-    //  * モックタスクデータを読み込み（開発用）
-    //  */
-    // private fun loadMockTasks() {
-    //     val today = LocalDate.now()
-    //     val mockTasks = listOf(
-    //         TaskItem(
-    //             id = "1",
-    //             title = "ジム",
-    //             description = "脚トレ",
-    //             createdAt = today.toString(),
-    //             repeatDays = listOf(1, 3, 5),
-    //             isRecurring = true
-    //         ),
-    //         TaskItem(
-    //             id = "2",
-    //             title = "読書",
-    //             description = "1時間",
-    //             createdAt = today.toString(),
-    //             repeatDays = listOf(0, 1, 2, 3, 4, 5, 6),
-    //             isRecurring = true
-    //         ),
-    //         TaskItem(
-    //             id = "3",
-    //             title = "歯医者",
-    //             description = "定期検診",
-    //             createdAt = today.toString(),
-    //             scheduledDate = today.plusDays(2).toString(),
-    //             isRecurring = false
-    //         ),
-    //         TaskItem(
-    //             id = "4",
-    //             title = "買い物",
-    //             description = null,
-    //             createdAt = today.toString(),
-    //             isRecurring = false
-    //         )
-    //     )
-    //     _uiState.update { it.copy(tasks = mockTasks, loading = false) }
-    // }
 
     // ─────────────────────────────
     // 日付選択
@@ -501,45 +455,12 @@ class TaskViewModel : ViewModel() {
                     )
                 }
             } else {
-                // TODO: モックをコメントアウト（サーバー通信確認用）
-                // addTaskLocally(currentTitle, currentDescription, currentState)
                 _uiState.update { it.copy(loading = false, errorMessage = "タスクの作成に失敗しました: ${response.code()}") }
             }
         } catch (e: Exception) {
-            // TODO: モックをコメントアウト（サーバー通信確認用）
-            // addTaskLocally(currentTitle, currentDescription, currentState)
             _uiState.update { it.copy(loading = false, errorMessage = "サーバー接続エラー: ${e.message}") }
         }
     }
-
-    // TODO: モックをコメントアウト（サーバー通信確認用）
-    // /**
-    //  * タスクをローカルで追加（開発用）
-    //  */
-    // private fun addTaskLocally(title: String, description: String?, state: TaskUiState) {
-    //     val newTask = TaskItem(
-    //         id = System.currentTimeMillis().toString(),
-    //         title = title,
-    //         description = description,
-    //         createdAt = LocalDate.now().toString(),
-    //         scheduledDate = state.scheduledDate?.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-    //         repeatDays = if (state.isRecurring) state.selectedDays.toList() else null,
-    //         isRecurring = state.isRecurring
-    //     )
-    //
-    //     _uiState.update { currentState ->
-    //         currentState.copy(
-    //             tasks = currentState.tasks + newTask,
-    //             loading = false,
-    //             title = "",
-    //             description = "",
-    //             scheduledDate = null,
-    //             isRecurring = false,
-    //             selectedDays = emptySet(),
-    //             taskCreated = true
-    //         )
-    //     }
-    // }
 
     /**
      * タスク更新イベントを処理

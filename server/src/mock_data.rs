@@ -96,7 +96,7 @@ fn create_mock_tasks() -> Vec<Task> {
 fn create_mock_logs(tasks: &[Task]) -> Vec<TaskLog> {
     let mut logs = Vec::new();
     let now = Utc::now();
-    
+
     for task in tasks {
         // 繰り返しタスクの場合、過去1週間分のログを作成
         if task.is_recurring {
@@ -108,33 +108,83 @@ fn create_mock_logs(tasks: &[Task]) -> Vec<TaskLog> {
                         .unwrap_or(0);
                     // 日曜日は0に変換（chronoは1-7を使用）
                     let day_index = if day_of_week == 7 { 0 } else { day_of_week };
-                    
-                    // その曜日が繰り返し日に含まれていて、50%の確率で実行済み
-                    if repeat_days.contains(&day_index) && days_ago % 2 == 0 {
+
+                    // その曜日が繰り返し日に含まれている場合
+                    if repeat_days.contains(&day_index) {
                         let start_time = target_date
                             .date_naive()
                             .and_hms_opt(9, 0, 0)
                             .map(|dt| dt.and_utc());
-                        
-                        let end_time = target_date
-                            .date_naive()
-                            .and_hms_opt(10, 0, 0)
-                            .map(|dt| dt.and_utc());
-                        
-                        let log = TaskLog::new(
-                            task.id,
-                            start_time,
-                            end_time,
-                            Some(format!("{}のログ", task.title)),
-                            Some(target_date),
-                        );
-                        logs.push(log);
+
+                        // 3パターン: 未開始、開始中、完了済み
+                        // days_ago % 3 == 0: 完了済み（過去の日）
+                        // days_ago % 3 == 1: 開始中
+                        // days_ago % 3 == 2: 未開始（ログなし）
+                        match days_ago % 3 {
+                            0 => {
+                                // 完了済み: 終了時刻あり
+                                let end_time = target_date
+                                    .date_naive()
+                                    .and_hms_opt(10, 0, 0)
+                                    .map(|dt| dt.and_utc());
+
+                                let log = TaskLog::new(
+                                    task.id,
+                                    start_time,
+                                    end_time,
+                                    Some(format!("{}完了", task.title)),
+                                    Some(target_date),
+                                );
+                                logs.push(log);
+                            }
+                            1 => {
+                                // 開始中: 終了時刻なし
+                                let log = TaskLog::new(
+                                    task.id,
+                                    start_time,
+                                    None, // 終了時刻なし = 進行中
+                                    Some(format!("{}開始中", task.title)),
+                                    Some(target_date),
+                                );
+                                logs.push(log);
+                            }
+                            _ => {
+                                // 未開始: ログを作成しない
+                            }
+                        }
                     }
                 }
             }
         }
+
+        // 単発タスク（scheduled_dateがある場合）もログを作成
+        if !task.is_recurring {
+            if let Some(scheduled_date) = task.scheduled_date {
+                // 予定日が今日または過去の場合、ログを作成
+                if scheduled_date <= now {
+                    let start_time = scheduled_date
+                        .date_naive()
+                        .and_hms_opt(9, 0, 0)
+                        .map(|dt| dt.and_utc());
+
+                    let end_time = scheduled_date
+                        .date_naive()
+                        .and_hms_opt(10, 0, 0)
+                        .map(|dt| dt.and_utc());
+
+                    let log = TaskLog::new(
+                        task.id,
+                        start_time,
+                        end_time,
+                        Some(format!("{}完了", task.title)),
+                        Some(scheduled_date),
+                    );
+                    logs.push(log);
+                }
+            }
+        }
     }
-    
+
     logs
 }
 
