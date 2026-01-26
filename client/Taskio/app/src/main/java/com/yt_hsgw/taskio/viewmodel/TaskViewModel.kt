@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yt_hsgw.taskio.api.RetrofitClient
 import com.yt_hsgw.taskio.model.TaskItem
+import com.yt_hsgw.taskio.model.TaskLogRequest
 import com.yt_hsgw.taskio.model.TaskRequest
+import com.yt_hsgw.taskio.model.TaskStatus
 import com.yt_hsgw.taskio.ui.TaskioStrings
 import com.yt_hsgw.taskio.viewmodel.LogViewModel
 import com.yt_hsgw.taskio.viewmodel.TaskUpdateEvent
@@ -60,12 +62,14 @@ data class TaskUiState(
  * @property isFinished タスクが終了しているかどうか
  * @property startedAt 開始時刻
  * @property finishedAt 終了時刻
+ * @property logId サーバー上のログID（開始時に取得）
  */
 data class TaskDayState(
     val isStarted: Boolean = false,
     val isFinished: Boolean = false,
     val startedAt: LocalDateTime? = null,
-    val finishedAt: LocalDateTime? = null
+    val finishedAt: LocalDateTime? = null,
+    val logId: String? = null
 )
 
 /**
@@ -146,6 +150,7 @@ class TaskViewModel : ViewModel() {
     init {
         setupCalendar()
         fetchTasks()
+        fetchTaskLogsForSelectedDate()
         viewModelScope.launch {
             LogViewModel.globalTaskUpdateEvent.collect { event ->
                 handleTaskUpdateEvent(event)
@@ -161,7 +166,7 @@ class TaskViewModel : ViewModel() {
      * 指定された日付に該当するタスクをフィルタリング
      *
      * フィルタリングルール:
-     * - 繰り返しタスク: 選択日の曜日が repeat_days に含まれていればマッチ
+     * - 繰り返しタスク: 選択日の曜日が repeat_days に含まれており、かつ予定日以降であればマッチ
      * - 単発タスク: scheduled_date が選択日と一致すればマッチ
      * - 日付未指定タスク: すべての日に表示
      *
@@ -175,7 +180,15 @@ class TaskViewModel : ViewModel() {
         return tasks.filter { task ->
             when {
                 task.isRecurring && task.repeatDays != null -> {
-                    task.repeatDays.contains(dayOfWeekIndex)
+                    // 曜日が一致し、かつ予定日（開始日）以降であること
+                    val isMatchingDay = task.repeatDays.contains(dayOfWeekIndex)
+                    val isOnOrAfterStartDate = task.scheduledDate?.let { scheduled ->
+                        runCatching {
+                            val startDate = LocalDate.parse(scheduled.substringBefore("T"))
+                            !date.isBefore(startDate)
+                        }.getOrDefault(true)
+                    } ?: true
+                    isMatchingDay && isOnOrAfterStartDate
                 }
                 task.scheduledDate != null -> {
                     runCatching {
@@ -225,8 +238,6 @@ class TaskViewModel : ViewModel() {
 
     /**
      * サーバーからタスク一覧を取得
-     *
-     * 取得に失敗した場合はモックデータを使用します（開発用）。
      */
     fun fetchTasks() {
         viewModelScope.launch {
@@ -267,6 +278,54 @@ class TaskViewModel : ViewModel() {
      */
     fun onDateSelected(date: LocalDate) {
         _uiState.update { it.copy(selectedDate = date) }
+        fetchTaskLogsForSelectedDate()
+    }
+
+    // ─────────────────────────────
+    // タスクログ取得
+    // ─────────────────────────────
+
+    /**
+     * 選択中の日付のタスクログをサーバーから取得
+     *
+     * カレンダー画面と同期するため、サーバーからログを取得して
+     * タスクの状態（開始/終了）を反映します。
+     */
+    private fun fetchTaskLogsForSelectedDate() {
+        viewModelScope.launch {
+            try {
+                val date = _uiState.value.selectedDate
+                val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+                val response = RetrofitClient.api.getLogsByDateRange(dateStr, dateStr)
+                if (response.isSuccessful && response.body() != null) {
+                    val logs = response.body()!!.logs
+                    _uiState.update { state ->
+                        var newTaskDayStates = state.taskDayStates
+                        for (log in logs) {
+                            val key = createTaskDayKey(log.task_id, date)
+                            val dayState = when (log.status) {
+                                TaskStatus.NOT_STARTED -> TaskDayState()
+                                TaskStatus.IN_PROGRESS -> TaskDayState(
+                                    isStarted = true,
+                                    isFinished = false,
+                                    logId = log.id
+                                )
+                                TaskStatus.COMPLETED -> TaskDayState(
+                                    isStarted = true,
+                                    isFinished = true,
+                                    logId = log.id
+                                )
+                            }
+                            newTaskDayStates = newTaskDayStates + (key to dayState)
+                        }
+                        state.copy(taskDayStates = newTaskDayStates)
+                    }
+                }
+            } catch (e: Exception) {
+                // ログ取得エラーは無視（ネットワークエラー時など）
+            }
+        }
     }
 
     // ─────────────────────────────
@@ -277,20 +336,56 @@ class TaskViewModel : ViewModel() {
      * タスクの開始状態をトグル
      *
      * 選択中の日付に対してタスクの開始状態を切り替えます。
+     * サーバーにタスクログを作成してカレンダー画面と同期します。
      *
      * @param taskId タスクID
      */
     fun toggleStart(taskId: String) {
         val date = _uiState.value.selectedDate
         val key = createTaskDayKey(taskId, date)
+        val currentState = _uiState.value.taskDayStates[key] ?: TaskDayState()
 
-        _uiState.update { state ->
-            val currentState = state.taskDayStates[key] ?: TaskDayState()
-            val newState = currentState.copy(
-                isStarted = !currentState.isStarted,
-                startedAt = if (!currentState.isStarted) LocalDateTime.now() else null
-            )
-            state.copy(taskDayStates = state.taskDayStates + (key to newState))
+        if (currentState.isStarted) {
+            // 既に開始済みの場合は開始状態を解除（ローカルのみ）
+            _uiState.update { state ->
+                val newState = TaskDayState(
+                    isStarted = false,
+                    startedAt = null,
+                    logId = null
+                )
+                state.copy(taskDayStates = state.taskDayStates + (key to newState))
+            }
+            return
+        }
+
+        // 開始する場合はサーバーにログを作成
+        viewModelScope.launch {
+            try {
+                val now = LocalDateTime.now()
+                val targetDate = date.atStartOfDay()
+                val request = TaskLogRequest(
+                    start_at = now.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "Z",
+                    target_date = targetDate.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "Z"
+                )
+
+                val response = RetrofitClient.api.createTaskLog(taskId, request)
+                if (response.isSuccessful && response.body() != null) {
+                    val logResponse = response.body()!!
+                    _uiState.update { state ->
+                        val newState = TaskDayState(
+                            isStarted = true,
+                            isFinished = false,
+                            startedAt = now,
+                            logId = logResponse.id
+                        )
+                        state.copy(taskDayStates = state.taskDayStates + (key to newState))
+                    }
+                } else {
+                    _uiState.update { it.copy(errorMessage = "タスクの開始に失敗しました: ${response.code()}") }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "サーバー接続エラー: ${e.message}") }
+            }
         }
     }
 
@@ -299,6 +394,7 @@ class TaskViewModel : ViewModel() {
      *
      * 選択中の日付に対してタスクの終了状態を切り替えます。
      * 開始していない場合は終了できません。
+     * サーバーのタスクログを更新してカレンダー画面と同期します。
      *
      * @param taskId タスクID
      */
@@ -306,15 +402,51 @@ class TaskViewModel : ViewModel() {
         val date = _uiState.value.selectedDate
         val key = createTaskDayKey(taskId, date)
 
-        _uiState.update { state ->
-            val currentState = state.taskDayStates[key] ?: TaskDayState()
-            if (!currentState.isStarted) return@update state
+        viewModelScope.launch {
+            // コルーチン内で最新の状態を取得
+            val currentState = _uiState.value.taskDayStates[key] ?: TaskDayState()
 
-            val newState = currentState.copy(
-                isFinished = !currentState.isFinished,
-                finishedAt = if (!currentState.isFinished) LocalDateTime.now() else null
-            )
-            state.copy(taskDayStates = state.taskDayStates + (key to newState))
+            if (!currentState.isStarted) return@launch
+
+            val logId = currentState.logId
+            if (logId == null) {
+                // ログIDがない場合はローカルのみ更新
+                _uiState.update { state ->
+                    val latestState = state.taskDayStates[key] ?: TaskDayState()
+                    val newState = latestState.copy(
+                        isFinished = !latestState.isFinished,
+                        finishedAt = if (!latestState.isFinished) LocalDateTime.now() else null
+                    )
+                    state.copy(taskDayStates = state.taskDayStates + (key to newState))
+                }
+                return@launch
+            }
+
+            try {
+                val now = LocalDateTime.now()
+                val isCompleting = !currentState.isFinished
+
+                val request = TaskLogRequest(
+                    end_at = if (isCompleting) now.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "Z" else null,
+                    is_completed = isCompleting
+                )
+
+                val response = RetrofitClient.api.updateTaskLog(logId, request)
+                if (response.isSuccessful) {
+                    _uiState.update { state ->
+                        val latestState = state.taskDayStates[key] ?: TaskDayState()
+                        val newState = latestState.copy(
+                            isFinished = isCompleting,
+                            finishedAt = if (isCompleting) now else null
+                        )
+                        state.copy(taskDayStates = state.taskDayStates + (key to newState))
+                    }
+                } else {
+                    _uiState.update { it.copy(errorMessage = "タスクの終了に失敗しました: ${response.code()}") }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "サーバー接続エラー: ${e.message}") }
+            }
         }
     }
 
@@ -395,7 +527,6 @@ class TaskViewModel : ViewModel() {
      * タスクを作成
      *
      * バリデーションを行い、サーバーにタスク作成リクエストを送信します。
-     * サーバーが利用できない場合はローカルで追加します（開発用）。
      */
     suspend fun createTask() {
         val currentTitle = _uiState.value.title.trim()
@@ -417,9 +548,11 @@ class TaskViewModel : ViewModel() {
 
         try {
             // サーバーはDateTime<Utc>を期待しているため、末尾にZを付加してUTC形式にする
-            val scheduledDateString = currentState.scheduledDate?.let {
-                it.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "Z"
-            }
+            // 予定日が未設定の場合は選択中の日付を使用
+            val scheduledDateString = (currentState.scheduledDate
+                ?: currentState.selectedDate.atStartOfDay()
+            ).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "Z"
+
             val request = TaskRequest(
                 title = currentTitle,
                 description = currentDescription,
@@ -504,6 +637,23 @@ class TaskViewModel : ViewModel() {
                 title = "",
                 description = "",
                 scheduledDate = null,
+                isRecurring = false,
+                selectedDays = emptySet()
+            )
+        }
+    }
+
+    /**
+     * タスク作成ダイアログを開く
+     *
+     * 選択中の日付を予定日の初期値として設定します。
+     */
+    fun openCreateDialog() {
+        _uiState.update {
+            it.copy(
+                title = "",
+                description = "",
+                scheduledDate = it.selectedDate.atStartOfDay(),
                 isRecurring = false,
                 selectedDays = emptySet()
             )

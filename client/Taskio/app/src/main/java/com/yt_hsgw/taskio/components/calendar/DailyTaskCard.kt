@@ -24,23 +24,24 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.yt_hsgw.taskio.model.CalendarLogResponse
 import com.yt_hsgw.taskio.model.TaskStatus
+import com.yt_hsgw.taskio.ui.theme.TaskioColors
 import com.yt_hsgw.taskio.ui.theme.TaskioTheme
 
 // ステータスに応じた色を取得
 private val TaskStatus.cardColor: Color
     @Composable
     get() = when (this) {
-        TaskStatus.NOT_STARTED -> MaterialTheme.colorScheme.surface
-        TaskStatus.IN_PROGRESS -> Color(0xFFE8F5E9) // 薄いグリーン（開始）
-        TaskStatus.COMPLETED -> Color(0xFFFFEBEE) // 薄いレッド（終了）
+        TaskStatus.NOT_STARTED -> TaskioColors.StatusDefault
+        TaskStatus.IN_PROGRESS -> TaskioColors.StatusInProgress  // 薄い青
+        TaskStatus.COMPLETED -> TaskioColors.StatusCompleted     // 薄い緑
     }
 
 private val TaskStatus.borderColor: Color
     @Composable
     get() = when (this) {
         TaskStatus.NOT_STARTED -> MaterialTheme.colorScheme.outlineVariant
-        TaskStatus.IN_PROGRESS -> Color(0xFF4CAF50) // グリーン（開始）
-        TaskStatus.COMPLETED -> Color(0xFFF44336) // レッド（終了）
+        TaskStatus.IN_PROGRESS -> TaskioColors.Secondary  // 青
+        TaskStatus.COMPLETED -> TaskioColors.Primary      // 緑
     }
 
 /**

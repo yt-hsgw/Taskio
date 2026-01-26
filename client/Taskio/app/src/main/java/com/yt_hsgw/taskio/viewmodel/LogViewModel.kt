@@ -23,8 +23,10 @@ data class LogUiState(
     val weeklyProgress: Map<String, Map<Int, Boolean>> = emptyMap(),
     val loading: Boolean = false,
     val updating: Boolean = false,
+    val deleting: Boolean = false,
     val errorMessage: String? = null,
     val taskUpdated: Boolean = false,
+    val taskDeleted: Boolean = false,
     // 編集ダイアログの状態
     val showEditDialog: Boolean = false,
     val editingTask: TaskItem? = null,
@@ -32,7 +34,10 @@ data class LogUiState(
     val editDescription: String = "",
     val editScheduledDate: LocalDate? = null,
     val editIsRecurring: Boolean = false,
-    val editSelectedDays: Set<Int> = emptySet()
+    val editSelectedDays: Set<Int> = emptySet(),
+    // 削除確認ダイアログの状態
+    val showDeleteDialog: Boolean = false,
+    val taskToDelete: TaskItem? = null
 )
 
 /**
@@ -291,6 +296,89 @@ class LogViewModel : ViewModel() {
     }
 
     // ─────────────────────────────
+    // 削除ダイアログ操作
+    // ─────────────────────────────
+
+    /**
+     * 削除確認ダイアログを表示
+     */
+    fun showDeleteConfirmation(task: TaskItem) {
+        _uiState.update {
+            it.copy(
+                showDeleteDialog = true,
+                taskToDelete = task
+            )
+        }
+    }
+
+    /**
+     * 削除確認ダイアログを閉じる
+     */
+    fun hideDeleteConfirmation() {
+        _uiState.update {
+            it.copy(
+                showDeleteDialog = false,
+                taskToDelete = null
+            )
+        }
+    }
+
+    /**
+     * タスクを削除
+     */
+    fun deleteTask() {
+        val taskToDelete = _uiState.value.taskToDelete ?: return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(deleting = true) }
+
+            try {
+                val response = RetrofitClient.api.deleteTask(taskToDelete.id)
+
+                if (response.isSuccessful) {
+                    // ローカルのタスクリストから削除
+                    val updatedTasks = _uiState.value.tasks.filter { it.id != taskToDelete.id }
+                    val weeklyProgress = calculateWeeklyProgress(updatedTasks)
+
+                    _uiState.update {
+                        it.copy(
+                            tasks = updatedTasks,
+                            weeklyProgress = weeklyProgress,
+                            deleting = false,
+                            taskDeleted = true,
+                            showDeleteDialog = false,
+                            taskToDelete = null
+                        )
+                    }
+
+                    // 他のViewModelに削除を通知
+                    _taskUpdateEvent.emit(TaskUpdateEvent.TaskDeleted(taskToDelete.id))
+                    // グローバルイベントも発行
+                    emitGlobalTaskUpdate(TaskUpdateEvent.TaskDeleted(taskToDelete.id))
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            deleting = false,
+                            showDeleteDialog = false,
+                            taskToDelete = null,
+                            errorMessage = "タスクの削除に失敗しました"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        deleting = false,
+                        showDeleteDialog = false,
+                        taskToDelete = null,
+                        errorMessage = "サーバー接続エラー: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────
     // ユーティリティ
     // ─────────────────────────────
 
@@ -306,6 +394,13 @@ class LogViewModel : ViewModel() {
      */
     fun resetTaskUpdated() {
         _uiState.update { it.copy(taskUpdated = false) }
+    }
+
+    /**
+     * タスク削除フラグをリセット
+     */
+    fun resetTaskDeleted() {
+        _uiState.update { it.copy(taskDeleted = false) }
     }
 
     /**

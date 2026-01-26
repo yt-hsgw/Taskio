@@ -84,7 +84,10 @@ fun HomeScreen(viewModel: TaskViewModel = viewModel()) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            CreateTaskFab(onClick = { showCreateDialog = true })
+            CreateTaskFab(onClick = {
+                viewModel.openCreateDialog()
+                showCreateDialog = true
+            })
         }
     ) { innerPadding ->
         HomeContent(

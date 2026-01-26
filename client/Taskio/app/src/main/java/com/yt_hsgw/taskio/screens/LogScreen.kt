@@ -7,12 +7,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,10 +68,19 @@ fun LogScreen(
         }
     }
 
+    // タスク削除完了通知
+    LaunchedEffect(uiState.taskDeleted) {
+        if (uiState.taskDeleted) {
+            snackbarHostState.showSnackbar(TaskioStrings.SUCCESS_TASK_DELETED)
+            viewModel.resetTaskDeleted()
+        }
+    }
+
     LogScreenContent(
         uiState = uiState,
         snackbarHostState = snackbarHostState,
         onEditClick = { task -> viewModel.openEditDialog(task) },
+        onDeleteClick = { task -> viewModel.showDeleteConfirmation(task) },
         onEditTitleChange = { viewModel.updateEditTitle(it) },
         onEditDescriptionChange = { viewModel.updateEditDescription(it) },
         onEditScheduledDateChange = { viewModel.updateEditScheduledDate(it) },
@@ -77,6 +88,8 @@ fun LogScreen(
         onEditDayToggle = { viewModel.toggleEditDay(it) },
         onEditSave = { viewModel.updateTask() },
         onEditDismiss = { viewModel.closeEditDialog() },
+        onDeleteConfirm = { viewModel.deleteTask() },
+        onDeleteDismiss = { viewModel.hideDeleteConfirmation() },
         modifier = modifier
     )
 }
@@ -89,6 +102,7 @@ private fun LogScreenContent(
     uiState: LogUiState,
     snackbarHostState: SnackbarHostState,
     onEditClick: (TaskItem) -> Unit,
+    onDeleteClick: (TaskItem) -> Unit,
     onEditTitleChange: (String) -> Unit,
     onEditDescriptionChange: (String) -> Unit,
     onEditScheduledDateChange: (LocalDate?) -> Unit,
@@ -96,6 +110,8 @@ private fun LogScreenContent(
     onEditDayToggle: (Int) -> Unit,
     onEditSave: () -> Unit,
     onEditDismiss: () -> Unit,
+    onDeleteConfirm: () -> Unit,
+    onDeleteDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -127,7 +143,8 @@ private fun LogScreenContent(
                     TaskLogList(
                         tasks = uiState.tasks,
                         weeklyProgress = uiState.weeklyProgress,
-                        onEditClick = onEditClick
+                        onEditClick = onEditClick,
+                        onDeleteClick = onDeleteClick
                     )
                 }
             }
@@ -151,6 +168,37 @@ private fun LogScreenContent(
                 onDismiss = onEditDismiss
             )
         }
+
+        // 削除確認ダイアログ
+        if (uiState.showDeleteDialog && uiState.taskToDelete != null) {
+            AlertDialog(
+                onDismissRequest = onDeleteDismiss,
+                title = {
+                    Text(text = TaskioStrings.DIALOG_DELETE_TASK_TITLE)
+                },
+                text = {
+                    Text(
+                        text = TaskioStrings.formatDeleteConfirmMessage(uiState.taskToDelete.title)
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = onDeleteConfirm,
+                        enabled = !uiState.deleting
+                    ) {
+                        Text(text = TaskioStrings.BUTTON_DELETE)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = onDeleteDismiss,
+                        enabled = !uiState.deleting
+                    ) {
+                        Text(text = TaskioStrings.BUTTON_CANCEL)
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -162,6 +210,7 @@ private fun TaskLogList(
     tasks: List<TaskItem>,
     weeklyProgress: Map<String, Map<Int, Boolean>>,
     onEditClick: (TaskItem) -> Unit,
+    onDeleteClick: (TaskItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -176,7 +225,8 @@ private fun TaskLogList(
             LogTaskCard(
                 task = task,
                 weeklyProgress = weeklyProgress[task.id] ?: emptyMap(),
-                onEditClick = { onEditClick(task) }
+                onEditClick = { onEditClick(task) },
+                onDeleteClick = { onDeleteClick(task) }
             )
         }
     }
@@ -266,13 +316,16 @@ private fun LogScreenContentPreview() {
             ),
             snackbarHostState = SnackbarHostState(),
             onEditClick = {},
+            onDeleteClick = {},
             onEditTitleChange = {},
             onEditDescriptionChange = {},
             onEditScheduledDateChange = {},
             onEditRecurringChange = {},
             onEditDayToggle = {},
             onEditSave = {},
-            onEditDismiss = {}
+            onEditDismiss = {},
+            onDeleteConfirm = {},
+            onDeleteDismiss = {}
         )
     }
 }
@@ -288,13 +341,16 @@ private fun LogScreenEmptyPreview() {
             ),
             snackbarHostState = SnackbarHostState(),
             onEditClick = {},
+            onDeleteClick = {},
             onEditTitleChange = {},
             onEditDescriptionChange = {},
             onEditScheduledDateChange = {},
             onEditRecurringChange = {},
             onEditDayToggle = {},
             onEditSave = {},
-            onEditDismiss = {}
+            onEditDismiss = {},
+            onDeleteConfirm = {},
+            onDeleteDismiss = {}
         )
     }
 }
@@ -307,13 +363,16 @@ private fun LogScreenLoadingPreview() {
             uiState = LogUiState(loading = true),
             snackbarHostState = SnackbarHostState(),
             onEditClick = {},
+            onDeleteClick = {},
             onEditTitleChange = {},
             onEditDescriptionChange = {},
             onEditScheduledDateChange = {},
             onEditRecurringChange = {},
             onEditDayToggle = {},
             onEditSave = {},
-            onEditDismiss = {}
+            onEditDismiss = {},
+            onDeleteConfirm = {},
+            onDeleteDismiss = {}
         )
     }
 }

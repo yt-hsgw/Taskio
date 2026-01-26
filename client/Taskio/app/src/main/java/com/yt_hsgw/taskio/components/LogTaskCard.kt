@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -42,6 +43,7 @@ import com.yt_hsgw.taskio.ui.theme.TaskioTheme
  * @param task タスク情報
  * @param weeklyProgress 週間進捗マップ（曜日インデックス -> 実行済みフラグ）
  * @param onEditClick 編集ボタンクリック時のコールバック
+ * @param onDeleteClick 削除ボタンクリック時のコールバック
  * @param modifier Modifier
  */
 @Composable
@@ -49,6 +51,7 @@ fun LogTaskCard(
     task: TaskItem,
     weeklyProgress: Map<Int, Boolean>,
     onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     // 説明文の行数をチェック（3行以上なら展開可能）
@@ -88,6 +91,14 @@ fun LogTaskCard(
                     Icon(
                         imageVector = Icons.Default.Edit,
                         contentDescription = TaskioStrings.CD_EDIT_TASK,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                IconButton(onClick = onDeleteClick) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = TaskioStrings.CD_DELETE_TASK,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -190,7 +201,8 @@ private fun LogTaskCardShortDescPreview() {
                 5 to false,
                 6 to false
             ),
-            onEditClick = {}
+            onEditClick = {},
+            onDeleteClick = {}
         )
     }
 }
@@ -220,7 +232,8 @@ private fun LogTaskCardLongDescPreview() {
                 5 to true,
                 6 to false
             ),
-            onEditClick = {}
+            onEditClick = {},
+            onDeleteClick = {}
         )
     }
 }
@@ -247,7 +260,8 @@ private fun LogTaskCardNoDescPreview() {
                 5 to false,
                 6 to false
             ),
-            onEditClick = {}
+            onEditClick = {},
+            onDeleteClick = {}
         )
     }
 }
