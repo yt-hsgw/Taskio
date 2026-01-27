@@ -119,6 +119,7 @@ object TaskioStrings {
     // ─────────────────────────────
     const val SUCCESS_TASK_CREATED = "タスクを作成しました"
     const val SUCCESS_TASK_UPDATED = "タスクを更新しました"
+    const val SUCCESS_TASK_DELETED = "タスクを削除しました"
 
     // ─────────────────────────────
     // Screen Titles / 画面タイトル

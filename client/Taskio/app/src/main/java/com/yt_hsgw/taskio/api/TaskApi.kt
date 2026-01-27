@@ -1,6 +1,7 @@
 package com.yt_hsgw.taskio.api
 
 import com.yt_hsgw.taskio.model.CalendarLogsResponse
+import com.yt_hsgw.taskio.model.TaskLogRequest
 import com.yt_hsgw.taskio.model.TaskLogResponse
 import com.yt_hsgw.taskio.model.TaskRequest
 import com.yt_hsgw.taskio.model.TaskResponse
@@ -93,6 +94,32 @@ interface TaskApi {
      */
     @GET("tasks/{task_id}/logs")
     suspend fun getTaskLogs(@Path("task_id") taskId: String): Response<List<TaskLogResponse>>
+
+    /**
+     * タスクログ作成（タスク開始）
+     *
+     * @param taskId タスクID
+     * @param req ログ作成リクエスト
+     * @return 作成されたログ
+     */
+    @POST("tasks/{task_id}/logs")
+    suspend fun createTaskLog(
+        @Path("task_id") taskId: String,
+        @Body req: TaskLogRequest
+    ): Response<TaskLogResponse>
+
+    /**
+     * タスクログ更新（タスク終了）
+     *
+     * @param logId ログID
+     * @param req ログ更新リクエスト
+     * @return 更新されたログ
+     */
+    @PUT("logs/{log_id}")
+    suspend fun updateTaskLog(
+        @Path("log_id") logId: String,
+        @Body req: TaskLogRequest
+    ): Response<TaskLogResponse>
 
     // ─────────────────────────────
     // Calendar Logs
