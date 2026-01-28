@@ -230,8 +230,148 @@ mod tests {
     fn test_calculate_duration() {
         let start = Utc::now();
         let end = start + chrono::Duration::minutes(45);
-        
+
         let duration = TaskLog::calculate_duration(start, end);
         assert_eq!(duration, 45);
+    }
+
+    #[test]
+    fn test_update_log_with_end_time() {
+        let task_id = Uuid::new_v4();
+        let start = Utc::now();
+        let mut log = TaskLog::new(task_id, Some(start), None, None, None);
+
+        assert!(!log.is_completed);
+        assert!(log.end_at.is_none());
+
+        let end = start + chrono::Duration::minutes(90);
+        log.update(None, Some(end), None, Some(true));
+
+        assert!(log.is_completed);
+        assert_eq!(log.end_at, Some(end));
+        assert_eq!(log.duration_min, Some(90));
+    }
+
+    #[test]
+    fn test_update_log_with_memo() {
+        let task_id = Uuid::new_v4();
+        let mut log = TaskLog::new(task_id, None, None, None, None);
+
+        assert!(log.memo.is_none());
+
+        log.update(None, None, Some("Added memo".to_string()), None);
+
+        assert_eq!(log.memo, Some("Added memo".to_string()));
+    }
+
+    #[test]
+    fn test_update_log_with_new_start_time() {
+        let task_id = Uuid::new_v4();
+        let original_start = Utc::now();
+        let mut log = TaskLog::new(task_id, Some(original_start), None, None, None);
+
+        let new_start = original_start - chrono::Duration::hours(1);
+        log.update(Some(new_start), None, None, None);
+
+        assert_eq!(log.start_at, new_start);
+    }
+
+    #[test]
+    fn test_update_log_recalculates_duration() {
+        let task_id = Uuid::new_v4();
+        let start = Utc::now();
+        let end = start + chrono::Duration::minutes(60);
+        let mut log = TaskLog::new(task_id, Some(start), Some(end), None, None);
+
+        assert_eq!(log.duration_min, Some(60));
+
+        // 終了時刻を延長
+        let new_end = start + chrono::Duration::minutes(120);
+        log.update(None, Some(new_end), None, None);
+
+        assert_eq!(log.duration_min, Some(120));
+    }
+
+    #[test]
+    fn test_update_log_completed_flag_only() {
+        let task_id = Uuid::new_v4();
+        let mut log = TaskLog::new(task_id, None, None, None, None);
+
+        assert!(!log.is_completed);
+
+        log.update(None, None, None, Some(true));
+        assert!(log.is_completed);
+
+        log.update(None, None, None, Some(false));
+        assert!(!log.is_completed);
+    }
+
+    #[test]
+    fn test_task_log_serialization() {
+        let task_id = Uuid::new_v4();
+        let start = Utc::now();
+        let end = start + chrono::Duration::minutes(45);
+        let log = TaskLog::new(
+            task_id,
+            Some(start),
+            Some(end),
+            Some("Test memo".to_string()),
+            None,
+        );
+
+        let json = serde_json::to_string(&log).unwrap();
+        let deserialized: TaskLog = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(log.id, deserialized.id);
+        assert_eq!(log.task_id, deserialized.task_id);
+        assert_eq!(log.duration_min, deserialized.duration_min);
+        assert_eq!(log.memo, deserialized.memo);
+        assert_eq!(log.is_completed, deserialized.is_completed);
+    }
+
+    #[test]
+    fn test_create_task_log_request() {
+        let json = r#"{
+            "start_at": "2025-01-15T10:00:00Z",
+            "end_at": "2025-01-15T11:30:00Z",
+            "memo": "Test memo",
+            "target_date": "2025-01-15T00:00:00Z"
+        }"#;
+
+        let create_log: CreateTaskLog = serde_json::from_str(json).unwrap();
+        let task_id = Uuid::new_v4();
+        let log = create_log.into_task_log(task_id);
+
+        assert_eq!(log.task_id, task_id);
+        assert!(log.end_at.is_some());
+        assert_eq!(log.duration_min, Some(90)); // 1時間30分
+        assert_eq!(log.memo, Some("Test memo".to_string()));
+        assert!(log.is_completed);
+    }
+
+    #[test]
+    fn test_duration_calculation_edge_cases() {
+        // 0分
+        let start = Utc::now();
+        let end = start;
+        assert_eq!(TaskLog::calculate_duration(start, end), 0);
+
+        // 1分未満は0分として計算
+        let end_30_sec = start + chrono::Duration::seconds(30);
+        assert_eq!(TaskLog::calculate_duration(start, end_30_sec), 0);
+
+        // 24時間
+        let end_24h = start + chrono::Duration::hours(24);
+        assert_eq!(TaskLog::calculate_duration(start, end_24h), 1440);
+    }
+
+    #[test]
+    fn test_task_log_with_target_date() {
+        use chrono::TimeZone;
+        let task_id = Uuid::new_v4();
+        let target = Utc.with_ymd_and_hms(2025, 6, 15, 0, 0, 0).unwrap();
+        let log = TaskLog::new(task_id, None, None, None, Some(target));
+
+        assert_eq!(log.target_date, target);
     }
 }

@@ -34,8 +34,8 @@ const DEFAULT_PORT: u16 = 8080;
 ///
 /// # Example
 ///
-/// ```rust
-/// use crate::config::get_port;
+/// ```rust,ignore
+/// use taskio_server::config::get_port;
 ///
 /// let port = get_port();
 /// println!("Server will listen on port {}", port);

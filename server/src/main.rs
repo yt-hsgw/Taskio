@@ -28,30 +28,15 @@
 //! - `PUT /api/v1/logs/{log_id}` - ログ更新
 //! - `DELETE /api/v1/logs/{log_id}` - ログ削除
 
-use axum::{
-    routing::{delete, get, post, put},
-    Router,
-};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod config;
-mod errors;
-mod models;
-mod routes;
-mod state;
-mod utils;
-
-use state::AppState;
+use taskio_server::{build_router, config, AppState};
 
 // ─────────────────────────────
 // 定数
 // ─────────────────────────────
-
-/// APIバージョンプレフィックス
-const API_PREFIX: &str = "/api/v1";
 
 /// デフォルトのログレベル
 const DEFAULT_LOG_LEVEL: &str = "taskio_server=debug";
@@ -99,47 +84,4 @@ fn init_tracing() {
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
-}
-
-/// アプリケーションルーターを構築
-///
-/// CORSミドルウェアとすべてのAPIルートを設定します。
-fn build_router(state: Arc<AppState>) -> Router {
-    // CORSミドルウェア（開発用に全許可）
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
-
-    // APIルート
-    let api = build_api_routes();
-
-    Router::new()
-        .nest(API_PREFIX, api)
-        .with_state(state)
-        .layer(cors)
-}
-
-/// APIルートを構築
-fn build_api_routes() -> Router<Arc<AppState>> {
-    Router::new()
-        // Health
-        .route("/health", get(routes::health::health_check))
-        // Tasks
-        .route("/tasks", get(routes::tasks::list_tasks))
-        .route("/tasks", post(routes::tasks::create_task))
-        .route("/tasks/:task_id", get(routes::tasks::get_task))
-        .route("/tasks/:task_id", put(routes::tasks::update_task))
-        .route("/tasks/:task_id", delete(routes::tasks::delete_task))
-        // Task Logs (per task)
-        .route(
-            "/tasks/:task_id/logs",
-            get(routes::task_logs::list_logs_for_task).post(routes::task_logs::create_log_for_task),
-        )
-        // Calendar Logs (date range query) - 新規追加
-        .route("/logs", get(routes::calendar::get_logs_by_date_range))
-        // Task Logs (direct)
-        .route("/logs/:log_id", get(routes::task_logs::get_log))
-        .route("/logs/:log_id", put(routes::task_logs::update_log))
-        .route("/logs/:log_id", delete(routes::task_logs::delete_log))
 }

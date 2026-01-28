@@ -183,4 +183,124 @@ mod tests {
         task.soft_delete();
         assert!(!task.is_active);
     }
+
+    #[test]
+    fn test_update_task() {
+        let mut task = Task::new(
+            "Original Title".to_string(),
+            Some("Original Description".to_string()),
+            None,
+            None,
+            None,
+        );
+
+        let original_created_at = task.created_at;
+
+        task.update(
+            "Updated Title".to_string(),
+            Some("Updated Description".to_string()),
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(task.title, "Updated Title");
+        assert_eq!(task.description, Some("Updated Description".to_string()));
+        assert_eq!(task.created_at, original_created_at);
+        assert!(task.updated_at > original_created_at);
+    }
+
+    #[test]
+    fn test_update_to_recurring() {
+        let mut task = Task::new("Task".to_string(), None, None, None, None);
+        assert!(!task.is_recurring);
+
+        task.update(
+            "Recurring Task".to_string(),
+            None,
+            None,
+            None,
+            Some(vec![0, 2, 4]), // 日・火・木
+        );
+
+        assert!(task.is_recurring);
+        assert_eq!(task.repeat_days, Some(vec![0, 2, 4]));
+    }
+
+    #[test]
+    fn test_update_from_recurring_to_single() {
+        let mut task = Task::new(
+            "Recurring Task".to_string(),
+            None,
+            None,
+            None,
+            Some(vec![1, 3, 5]),
+        );
+        assert!(task.is_recurring);
+
+        task.update(
+            "Single Task".to_string(),
+            None,
+            None,
+            None,
+            None, // repeat_days を None にすると単発タスクに
+        );
+
+        assert!(!task.is_recurring);
+        assert!(task.repeat_days.is_none());
+    }
+
+    #[test]
+    fn test_update_with_scheduled_date() {
+        use chrono::TimeZone;
+        let mut task = Task::new("Task".to_string(), None, None, None, None);
+
+        let scheduled = Utc.with_ymd_and_hms(2025, 6, 15, 10, 0, 0).unwrap();
+        task.update(
+            "Scheduled Task".to_string(),
+            None,
+            None,
+            Some(scheduled),
+            None,
+        );
+
+        assert_eq!(task.scheduled_date, Some(scheduled));
+    }
+
+    #[test]
+    fn test_task_serialization() {
+        let task = Task::new(
+            "Test Task".to_string(),
+            Some("Description".to_string()),
+            None,
+            None,
+            Some(vec![1, 3, 5]),
+        );
+
+        let json = serde_json::to_string(&task).unwrap();
+        let deserialized: Task = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(task.id, deserialized.id);
+        assert_eq!(task.title, deserialized.title);
+        assert_eq!(task.description, deserialized.description);
+        assert_eq!(task.is_recurring, deserialized.is_recurring);
+        assert_eq!(task.repeat_days, deserialized.repeat_days);
+    }
+
+    #[test]
+    fn test_create_task_request() {
+        let json = r#"{
+            "title": "Test Task",
+            "description": "Test Description",
+            "repeat_days": [1, 3, 5]
+        }"#;
+
+        let create_task: CreateTask = serde_json::from_str(json).unwrap();
+        let task = create_task.into_task();
+
+        assert_eq!(task.title, "Test Task");
+        assert_eq!(task.description, Some("Test Description".to_string()));
+        assert!(task.is_recurring);
+        assert_eq!(task.repeat_days, Some(vec![1, 3, 5]));
+    }
 }

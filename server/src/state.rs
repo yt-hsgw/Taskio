@@ -17,9 +17,9 @@ use crate::models::task_log::TaskLog;
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use std::sync::Arc;
-/// use crate::state::AppState;
+/// use taskio_server::state::AppState;
 ///
 /// let state = Arc::new(AppState::new());
 /// ```

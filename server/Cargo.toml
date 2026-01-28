@@ -18,3 +18,7 @@ tower-http = { version = "0.5", features = ["cors"] }
 # API エラー型用 (オプション)
 thiserror = "1"
 chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tower = { version = "0.4", features = ["util"] }
+http-body-util = "0.1"

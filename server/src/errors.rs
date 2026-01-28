@@ -42,8 +42,8 @@ mod error_messages {
 ///
 /// # Example
 ///
-/// ```rust
-/// use crate::errors::ApiError;
+/// ```rust,ignore
+/// use taskio_server::errors::ApiError;
 ///
 /// fn get_task(id: &str) -> Result<Task, ApiError> {
 ///     let uuid = Uuid::parse_str(id)?;

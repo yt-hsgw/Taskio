@@ -11,8 +11,8 @@ use uuid::Uuid;
 ///
 /// # Example
 ///
-/// ```rust
-/// use crate::utils::ApiResult;
+/// ```rust,ignore
+/// use taskio_server::utils::ApiResult;
 /// use axum::Json;
 ///
 /// async fn get_item(id: String) -> ApiResult<Json<Item>> {
@@ -38,8 +38,8 @@ pub type ApiResult<T> = Result<T, ApiError>;
 ///
 /// # Example
 ///
-/// ```rust
-/// use crate::utils::parse_uuid;
+/// ```rust,ignore
+/// use taskio_server::utils::parse_uuid;
 ///
 /// let uuid = parse_uuid("550e8400-e29b-41d4-a716-446655440000")?;
 /// ```
